@@ -62,15 +62,19 @@ def dashboard():
 
 @app.route('/api/data')
 def api_data():
-    """API endpoint to fetch the latest OI data."""
+    """API endpoint to fetch the latest OI data based on user selections."""
     if 'access_token' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
 
+    # Get parameters from the request, with fallbacks
+    symbol = request.args.get('symbol', 'NSE_INDEX|Nifty 50')
+    expiry = request.args.get('expiry') # The logic will handle a None expiry
+
     access_token = session['access_token']
-    data = tracker_logic.get_oi_data(access_token)
+    data = tracker_logic.get_oi_data(access_token, symbol, expiry)
 
     if data is None:
-        return jsonify({'error': 'Could not fetch data from Upstox API. Your token may be invalid.'}), 500
+        return jsonify({'error': f"Could not fetch data for {symbol}. The symbol might be invalid or there's no data for the selected expiry."}), 500
 
     call_data, put_data = data
     return jsonify({'call_data': call_data, 'put_data': put_data})

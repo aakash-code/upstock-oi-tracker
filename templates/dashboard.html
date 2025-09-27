@@ -17,6 +17,11 @@
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
         .header a { text-decoration: none; background-color: #0052cc; color: white; padding: 0.5rem 1rem; border-radius: 4px; }
         .header a:hover { background-color: #003d99; }
+        .error-message { background-color: #ffebe6; border: 1px solid #ff0000; color: #333; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; }
+        .controls { display: flex; gap: 1rem; align-items: flex-end; background: white; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex-wrap: wrap; }
+        .control-group { display: flex; flex-direction: column; }
+        .control-group label { margin-bottom: 0.5rem; font-size: 0.9rem; color: #555; }
+        .control-group select, .control-group input { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
     </style>
 </head>
 <body>
@@ -24,6 +29,25 @@
         <div class="header">
             <h1>OI Tracker Dashboard</h1>
             <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="symbol-select">Select Index:</label>
+                <select id="symbol-select">
+                    <option value="NSE_INDEX|Nifty 50" selected>Nifty 50</option>
+                    <option value="NSE_INDEX|Nifty Bank">Nifty Bank</option>
+                    <option value="BSE_INDEX|SENSEX">Sensex</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="stock-symbol">Or Enter Stock Symbol:</label>
+                <input type="text" id="stock-symbol" placeholder="e.g., RELIANCE">
+            </div>
+            <div class="control-group">
+                <label for="expiry-date">Expiry Date:</label>
+                <input type="date" id="expiry-date">
+            </div>
         </div>
 
         {% if error %}
@@ -39,6 +63,8 @@
                     <thead>
                         <tr>
                             <th>Strike Price</th>
+                            <th>3 mins</th>
+                            <th>5 mins</th>
                             <th>10 mins</th>
                             <th>15 mins</th>
                             <th>30 mins</th>
@@ -55,6 +81,8 @@
                     <thead>
                         <tr>
                             <th>Strike Price</th>
+                            <th>3 mins</th>
+                            <th>5 mins</th>
                             <th>10 mins</th>
                             <th>15 mins</th>
                             <th>30 mins</th>
@@ -74,21 +102,21 @@
             const putTableBody = document.getElementById('put-table-body');
             const errorContainer = document.querySelector('.error-message');
 
-            const thresholds = { 10: 10, 15: 15, 30: 25 };
+            const thresholds = { 3: 5, 5: 8, 10: 10, 15: 15, 30: 25 };
 
             const updateTable = (tableBody, data) => {
                 // Clear existing rows
                 tableBody.innerHTML = '';
 
                 // Get sorted strikes
-                const sortedStrikes = Object.keys(data).sort((a, b) => a - b);
+                const sortedStrikes = Object.keys(data).sort((a, b) => parseFloat(a) - parseFloat(b));
 
                 for (const strike of sortedStrikes) {
-                    const changes = data[strike];
+                    const changes = data[strike] || {};
                     const row = document.createElement('tr');
 
                     let rowHTML = `<td>${strike}</td>`;
-                    for (const interval of [10, 15, 30]) {
+                    for (const interval of [3, 5, 10, 15, 30]) {
                         const change = changes[interval] || 0;
                         const isRed = change > thresholds[interval];
                         rowHTML += `<td class="${isRed ? 'red-cell' : ''}">${change.toFixed(2)}</td>`;
@@ -98,8 +126,31 @@
                 }
             };
 
+            const symbolSelect = document.getElementById('symbol-select');
+            const stockSymbolInput = document.getElementById('stock-symbol');
+            const expiryDateInput = document.getElementById('expiry-date');
+
             const fetchData = () => {
-                fetch('/api/data')
+                let symbol = stockSymbolInput.value.trim().toUpperCase();
+                if (!symbol) {
+                    symbol = symbolSelect.value;
+                } else {
+                    // For stocks, we assume the exchange is NSE. This could be enhanced later.
+                    symbol = `NSE_EQ|${symbol}`;
+                }
+
+                let expiry = expiryDateInput.value;
+                if (!expiry) {
+                    // Default to a future date if none selected, as the API requires it.
+                    // A better approach would be to fetch available expiries.
+                    const today = new Date();
+                    expiry = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+                    expiryDateInput.value = expiry;
+                }
+
+                const apiUrl = `/api/data?symbol=${encodeURIComponent(symbol)}&expiry=${expiry}`;
+
+                fetch(apiUrl)
                     .then(response => {
                         if (!response.ok) {
                             throw new Error('Network response was not ok');
@@ -121,6 +172,11 @@
                         errorContainer.style.display = 'block';
                     });
             };
+
+            // Add event listeners to refetch data on change
+            symbolSelect.addEventListener('change', fetchData);
+            stockSymbolInput.addEventListener('change', fetchData);
+            expiryDateInput.addEventListener('change', fetchData);
 
             fetchData(); // Initial fetch
             setInterval(fetchData, 60000); // Refresh every 60 seconds
