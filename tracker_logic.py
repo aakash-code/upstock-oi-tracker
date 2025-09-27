@@ -65,7 +65,7 @@ def get_available_expiry_dates(api_client, instrument_key):
     """Fetches all available expiry dates for a given instrument using the dedicated endpoint."""
     api_instance = upstox_client.ExpiredInstrumentApi(api_client)
     try:
-        api_response = api_instance.get_expiries(instrument_key, "v2")
+        api_response = api_instance.get_expiries(instrument_key)
         return api_response.data or []
     except ApiException as e:
         print(f"Error fetching expiry dates for {instrument_key}: {e}")
