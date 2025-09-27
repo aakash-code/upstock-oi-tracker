@@ -1,0 +1,3 @@
+upstox-python-sdk
+pandas
+rich
