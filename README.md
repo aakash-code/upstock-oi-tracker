@@ -1,12 +1,16 @@
 # Upstox OI Tracker Web Application
 
-This application provides a web-based interface to track Open Interest (OI) changes for Nifty 50 options contracts using the Upstox API.
+This application provides a powerful, dynamic, and live web-based interface to track Open Interest (OI) changes for options contracts using the Upstox API.
 
 ## Features
 
-- **Web-based Interface:** A user-friendly web page to securely enter your Upstox API credentials.
-- **Secure Authentication:** Implements the standard OAuth2 flow to authenticate with the Upstox API.
-- **OI Dashboard:** Displays OI changes for At-The-Money (ATM), 2 In-The-Money (ITM), and 2 Out-of-The-Money (OTM) strikes.
+- **Dynamic Instrument Selection:** The application automatically fetches and displays a comprehensive list of all tradable instruments (indices and stocks) that have derivatives. A live search filter makes it easy to find any instrument.
+- **Dynamic Expiry Date Selection:** The expiry date dropdown is dynamically populated with all valid expiry dates for the selected instrument.
+- **Live OI Dashboard:** The dashboard auto-refreshes every 60 seconds, providing a real-time view of the market.
+- **Expanded Data View:** Tracks 7 strikes (ATM ± 3) and calculates OI changes over 5 different time intervals (3, 5, 10, 15, and 30 minutes).
+- **Flexible Login:** Supports two login methods:
+    1.  **Standard OAuth2 Flow:** Enter your API Key and Secret to go through the secure login process.
+    2.  **Direct Access Token:** If you already have a valid access token, you can paste it in to go directly to the dashboard.
 - **Color-Coded Tables:** Separate tables for Call and Put options, with color-coding to highlight significant OI changes.
 
 ## Prerequisites
@@ -17,13 +21,15 @@ This application provides a web-based interface to track Open Interest (OI) chan
 
 ## Setup and Installation
 
-### 1. Configure Your Upstox App
+### 1. Configure Your Upstox App's Redirect URI
 
-Before you run the application, you need to configure the **Redirect URI** in your Upstox app settings.
+This is the most important setup step. For the login process to work, you must configure the **Redirect URI** in your Upstox app settings.
 
 - Go to your app settings on the Upstox Developer Console.
 - Set the Redirect URI to: `http://127.0.0.1:5000/callback`
-- Make sure to save the changes. This step is crucial for the login process to work.
+- Make sure to save the changes.
+
+*(Note: If you are running this in a cloud environment like GitHub Codespaces, you must use the publicly forwarded URL provided by that environment instead of `127.0.0.1:5000`)*
 
 ### 2. Clone the Repository
 
@@ -67,12 +73,6 @@ pip install -r requirements.txt
 
     `http://127.0.0.1:5000`
 
-4.  You will see the login page. **Enter your API Key and API Secret** and click "Login with Upstox".
-5.  You will be redirected to the Upstox website to log in and grant access.
-6.  After a successful login, you will be redirected back to the application's dashboard, where you will see the OI data.
-
-## Important Notes
-
-- Your API credentials are not stored in the application. They are used only for the initial authentication flow.
-- The application uses a Flask session to securely store your `access_token` for the duration of your session.
-- For simplicity, the options expiry date is hardcoded in `tracker_logic.py`. You can modify this as needed.
+4.  You will see the login page with two options. Use either your API credentials or a direct access token to log in.
+5.  If using credentials, you will be redirected to the Upstox website to log in and grant access.
+6.  After a successful login, you will be redirected to the application's powerful, live dashboard. Enjoy!

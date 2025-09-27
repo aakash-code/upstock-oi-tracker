@@ -60,6 +60,28 @@ def dashboard():
         return redirect(url_for('index'))
     return render_template('dashboard.html')
 
+@app.route('/api/instruments')
+def api_instruments():
+    """API endpoint to fetch the list of tradable instruments."""
+    # This doesn't require authentication as it fetches public data
+    instruments = tracker_logic.get_tradable_instruments()
+    return jsonify({'instruments': instruments})
+
+@app.route('/api/expiry-dates')
+def api_expiry_dates():
+    """API endpoint to fetch available expiry dates for a symbol."""
+    if 'access_token' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    symbol = request.args.get('symbol')
+    if not symbol:
+        return jsonify({'error': 'Symbol parameter is required'}), 400
+
+    api_client = tracker_logic.get_api_client(session['access_token'])
+    dates = tracker_logic.get_available_expiry_dates(api_client, symbol)
+
+    return jsonify({'expiry_dates': dates})
+
 @app.route('/api/data')
 def api_data():
     """API endpoint to fetch the latest OI data based on user selections."""

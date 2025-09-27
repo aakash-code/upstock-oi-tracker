@@ -46,7 +46,7 @@
             </div>
             <div class="control-group">
                 <label for="expiry-date">Expiry Date:</label>
-                <input type="date" id="expiry-date">
+                <select id="expiry-date"></select>
             </div>
         </div>
 
@@ -128,39 +128,65 @@
 
             const symbolSelect = document.getElementById('symbol-select');
             const stockSymbolInput = document.getElementById('stock-symbol');
-            const expiryDateInput = document.getElementById('expiry-date');
+            const expiryDateSelect = document.getElementById('expiry-date');
+            let allInstruments = [];
+
+            const populateInstruments = (instruments) => {
+                symbolSelect.innerHTML = '';
+                instruments.forEach(inst => {
+                    const option = document.createElement('option');
+                    option.value = inst.key;
+                    option.textContent = inst.name;
+                    symbolSelect.appendChild(option);
+                });
+            };
+
+            const filterInstruments = () => {
+                const filterText = stockSymbolInput.value.trim().toUpperCase();
+                if (!filterText) {
+                    populateInstruments(allInstruments);
+                    return;
+                }
+                const filtered = allInstruments.filter(inst => inst.name.toUpperCase().includes(filterText));
+                populateInstruments(filtered);
+            };
+
+            const updateExpiryDates = (symbol) => {
+                fetch(`/api/expiry-dates?symbol=${encodeURIComponent(symbol)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        expiryDateSelect.innerHTML = ''; // Clear old options
+                        if (data.expiry_dates && data.expiry_dates.length > 0) {
+                            data.expiry_dates.forEach(date => {
+                                const option = document.createElement('option');
+                                option.value = date;
+                                option.textContent = date;
+                                expiryDateSelect.appendChild(option);
+                            });
+                            fetchData(); // Fetch data for the first expiry
+                        } else {
+                            callTableBody.innerHTML = '';
+                            putTableBody.innerHTML = '';
+                        }
+                    });
+            };
 
             const fetchData = () => {
-                let symbol = stockSymbolInput.value.trim().toUpperCase();
-                if (!symbol) {
-                    symbol = symbolSelect.value;
-                } else {
-                    // For stocks, we assume the exchange is NSE. This could be enhanced later.
-                    symbol = `NSE_EQ|${symbol}`;
-                }
+                const symbol = symbolSelect.value;
+                const expiry = expiryDateSelect.value;
 
-                let expiry = expiryDateInput.value;
-                if (!expiry) {
-                    // Default to a future date if none selected, as the API requires it.
-                    // A better approach would be to fetch available expiries.
-                    const today = new Date();
-                    expiry = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
-                    expiryDateInput.value = expiry;
-                }
+                if (!symbol || !expiry) return;
 
                 const apiUrl = `/api/data?symbol=${encodeURIComponent(symbol)}&expiry=${expiry}`;
 
                 fetch(apiUrl)
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error('Network response was not ok');
-                        }
-                        return response.json();
-                    })
+                    .then(response => response.json())
                     .then(data => {
                         if (data.error) {
                             errorContainer.innerHTML = `<p><strong>Error:</strong> ${data.error}</p>`;
                             errorContainer.style.display = 'block';
+                            callTableBody.innerHTML = '';
+                            putTableBody.innerHTML = '';
                         } else {
                             errorContainer.style.display = 'none';
                             updateTable(callTableBody, data.call_data);
@@ -168,17 +194,29 @@
                         }
                     })
                     .catch(error => {
-                        errorContainer.innerHTML = `<p><strong>Error:</strong> Could not connect to the server. Please check if the application is running.</p>`;
+                        errorContainer.innerHTML = `<p><strong>Error:</strong> Could not connect to the server.</p>`;
                         errorContainer.style.display = 'block';
                     });
             };
 
-            // Add event listeners to refetch data on change
-            symbolSelect.addEventListener('change', fetchData);
-            stockSymbolInput.addEventListener('change', fetchData);
-            expiryDateInput.addEventListener('change', fetchData);
+            const handleSymbolChange = () => {
+                updateExpiryDates(symbolSelect.value);
+            };
 
-            fetchData(); // Initial fetch
+            // Event Listeners
+            symbolSelect.addEventListener('change', handleSymbolChange);
+            stockSymbolInput.addEventListener('input', filterInstruments); // Use 'input' for live filtering
+            expiryDateSelect.addEventListener('change', fetchData);
+
+            // Initial Load
+            fetch('/api/instruments')
+                .then(response => response.json())
+                .then(data => {
+                    allInstruments = data.instruments;
+                    populateInstruments(allInstruments);
+                    handleSymbolChange(); // Load expiries for the first instrument
+                });
+
             setInterval(fetchData, 60000); // Refresh every 60 seconds
         });
     </script>

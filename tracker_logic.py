@@ -2,12 +2,74 @@ import upstox_client
 from upstox_client.rest import ApiException
 from datetime import datetime, timedelta
 import pandas as pd
+import urllib.request
+import gzip
+import csv
+import io
+
+# --- Cache for instruments ---
+instrument_cache = None
+
+def get_tradable_instruments():
+    """
+    Fetches and filters all tradable instruments that have derivatives from the Upstox instruments list.
+    Caches the result in memory to avoid repeated downloads.
+    """
+    global instrument_cache
+    if instrument_cache is not None:
+        return instrument_cache
+
+    try:
+        INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NSE_FO.csv.gz"
+
+        with urllib.request.urlopen(INSTRUMENTS_URL) as response:
+            compressed_file = io.BytesIO(response.read())
+            decompressed_file = gzip.GzipFile(fileobj=compressed_file)
+            content = decompressed_file.read().decode('utf-8')
+            csv_file = io.StringIO(content)
+
+            reader = csv.DictReader(csv_file)
+
+            underlyings = {row.get('underlying_symbol'): row.get('underlying_key') for row in reader if row.get('underlying_symbol') and row.get('underlying_key')}
+
+            main_indices = {
+                "Nifty 50": "NSE_INDEX|Nifty 50",
+                "Nifty Bank": "NSE_INDEX|Nifty Bank",
+                "Sensex": "BSE_INDEX|SENSEX"
+            }
+
+            instrument_list = [{'name': name, 'key': key} for name, key in main_indices.items()]
+            for name, key in sorted(underlyings.items()):
+                if name not in main_indices:
+                     instrument_list.append({'name': name, 'key': key})
+
+            instrument_cache = instrument_list
+            return instrument_cache
+
+    except Exception as e:
+        print(f"Error fetching dynamic tradable instruments: {e}. Falling back to a hardcoded list.")
+        instrument_cache = [
+            {'name': 'Nifty 50', 'key': 'NSE_INDEX|Nifty 50'},
+            {'name': 'Nifty Bank', 'key': 'NSE_INDEX|Nifty Bank'},
+            {'name': 'Sensex', 'key': 'BSE_INDEX|SENSEX'},
+        ]
+        return instrument_cache
 
 def get_api_client(access_token):
     """Creates and returns an Upstox API client instance."""
     configuration = upstox_client.Configuration()
     configuration.access_token = access_token
     return upstox_client.ApiClient(configuration)
+
+def get_available_expiry_dates(api_client, instrument_key):
+    """Fetches all available expiry dates for a given instrument using the dedicated endpoint."""
+    api_instance = upstox_client.ExpiredInstrumentApi(api_client)
+    try:
+        api_response = api_instance.get_expiries(instrument_key, "v2")
+        return api_response.data or []
+    except ApiException as e:
+        print(f"Error fetching expiry dates for {instrument_key}: {e}")
+        return []
 
 def get_ltp(api_client, instrument_key):
     """Fetches the Last Traded Price (LTP) for a given instrument key."""
@@ -62,11 +124,17 @@ def calculate_oi_change(initial_oi, current_oi):
         return 0.0
     return ((current_oi - initial_oi) / initial_oi) * 100
 
-def get_oi_data(access_token, symbol, expiry):
+def get_oi_data(access_token, symbol, expiry_date):
     """The main function to fetch and process all OI data."""
     api_client = get_api_client(access_token)
 
-    expiry_date = expiry or (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
+    if not expiry_date:
+        # If no expiry is provided, fetch all and use the first one (nearest)
+        available_expiries = get_available_expiry_dates(api_client, symbol)
+        if not available_expiries:
+            print(f"Could not find any available expiry dates for {symbol}.")
+            return None
+        expiry_date = available_expiries[0]
 
     ltp = get_ltp(api_client, symbol)
     if ltp is None:
