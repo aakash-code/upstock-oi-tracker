@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import urllib.request
 import gzip
-import csv
+import json
 import io
 
 # --- Cache for instruments ---
@@ -12,7 +12,7 @@ instrument_cache = None
 
 def get_tradable_instruments():
     """
-    Fetches and filters all tradable instruments that have derivatives from the Upstox instruments list.
+    Fetches and filters all tradable F&O instruments from the Upstox instruments list using the NFO JSON file.
     Caches the result in memory to avoid repeated downloads.
     """
     global instrument_cache
@@ -20,17 +20,14 @@ def get_tradable_instruments():
         return instrument_cache
 
     try:
-        INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NSE_FO.csv.gz"
+        INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NFO.json.gz"
 
         with urllib.request.urlopen(INSTRUMENTS_URL) as response:
             compressed_file = io.BytesIO(response.read())
-            decompressed_file = gzip.GzipFile(fileobj=compressed_file)
-            content = decompressed_file.read().decode('utf-8')
-            csv_file = io.StringIO(content)
+            with gzip.GzipFile(fileobj=compressed_file, mode='r') as decompressed_file:
+                data = json.load(decompressed_file)
 
-            reader = csv.DictReader(csv_file)
-
-            underlyings = {row.get('underlying_symbol'): row.get('underlying_key') for row in reader if row.get('underlying_symbol') and row.get('underlying_key')}
+            underlyings = {row.get('underlying_symbol'): row.get('underlying_key') for row in data if row.get('instrument_type') == 'OPTSTK' and row.get('underlying_symbol')}
 
             main_indices = {
                 "Nifty 50": "NSE_INDEX|Nifty 50",
