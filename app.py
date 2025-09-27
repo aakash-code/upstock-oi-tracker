@@ -60,7 +60,15 @@ def dashboard():
     access_token = session['access_token']
 
     # Fetch the OI data using the logic from our tracker_logic file
-    call_data, put_data = tracker_logic.get_oi_data(access_token)
+    data = tracker_logic.get_oi_data(access_token)
+
+    if data is None:
+        # Handle cases where the API call fails (e.g., invalid token)
+        call_data, put_data = {}, {}
+        error_message = "Could not fetch data. Your access token may be invalid or expired. Please try logging out and back in again."
+        return render_template('dashboard.html', call_data=call_data, put_data=put_data, error=error_message)
+
+    call_data, put_data = data
 
     # Render the dashboard template with the fetched data
     return render_template('dashboard.html', call_data=call_data, put_data=put_data)

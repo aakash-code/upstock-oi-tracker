@@ -25,6 +25,13 @@
             <h1>OI Tracker Dashboard</h1>
             <a href="{{ url_for('logout') }}">Logout</a>
         </div>
+
+        {% if error %}
+            <div class="error-message">
+                <p><strong>Error:</strong> {{ error }}</p>
+            </div>
+        {% endif %}
+
         <div class="grid">
             <div class="table-container">
                 <h2>Call OI Change (%)</h2>
