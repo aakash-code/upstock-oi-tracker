@@ -62,11 +62,18 @@ def get_api_client(access_token):
     return upstox_client.ApiClient(configuration)
 
 def get_available_expiry_dates(api_client, instrument_key):
-    """Fetches all available expiry dates for a given instrument using the dedicated endpoint."""
+    """Fetches all available expiry dates for a given instrument and filters for future dates."""
     api_instance = upstox_client.ExpiredInstrumentApi(api_client)
     try:
         api_response = api_instance.get_expiries(instrument_key)
-        return api_response.data or []
+        if not api_response.data:
+            return []
+
+        # Filter for dates that are today or in the future
+        today = datetime.now().date()
+        future_dates = [d for d in api_response.data if datetime.strptime(d, '%Y-%m-%d').date() >= today]
+        return sorted(future_dates)
+
     except ApiException as e:
         print(f"Error fetching expiry dates for {instrument_key}: {e}")
         return []

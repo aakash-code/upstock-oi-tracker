@@ -76,3 +76,8 @@ pip install -r requirements.txt
 4.  You will see the login page with two options. Use either your API credentials or a direct access token to log in.
 5.  If using credentials, you will be redirected to the Upstox website to log in and grant access.
 6.  After a successful login, you will be redirected to the application's powerful, live dashboard. Enjoy!
+
+## Important Notes
+
+- **Instrument List:** The application attempts to download a full list of tradable instruments from Upstox's servers. In some environments (like corporate networks or certain cloud platforms), this download may be blocked, resulting in a "403 Forbidden" error in the server logs. In this case, the application will gracefully fall back to a default list of major indices (Nifty, BankNifty, Sensex).
+- **Session Management:** The application uses a Flask session to securely store your `access_token` for the duration of your session. Closing your browser tab may end the session.
