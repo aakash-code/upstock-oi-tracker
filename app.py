@@ -77,8 +77,8 @@ def api_expiry_dates():
     if not symbol:
         return jsonify({'error': 'Symbol parameter is required'}), 400
 
-    api_client = tracker_logic.get_api_client(session['access_token'])
-    dates = tracker_logic.get_available_expiry_dates(api_client, symbol)
+    # The function now uses the database and doesn't need the api_client
+    dates = tracker_logic.get_available_expiry_dates(symbol)
 
     return jsonify({'expiry_dates': dates})
 
