@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OI Tracker Dashboard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f0f2f5; color: #333; margin: 0; padding: 2rem; }
+        h1, h2 { color: #1d2129; }
+        .container { max-width: 1200px; margin: auto; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { padding: 1rem; text-align: right; border-bottom: 1px solid #ddd; }
+        th { background-color: #f5f6f7; font-weight: 600; }
+        td:first-child, th:first-child { text-align: left; font-weight: bold; color: #0052cc; }
+        .red-cell { background-color: #ffebe6; color: #ff0000; font-weight: bold; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+        .header a { text-decoration: none; background-color: #0052cc; color: white; padding: 0.5rem 1rem; border-radius: 4px; }
+        .header a:hover { background-color: #003d99; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>OI Tracker Dashboard</h1>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+        <div class="grid">
+            <div class="table-container">
+                <h2>Call OI Change (%)</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Strike Price</th>
+                            <th>10 mins</th>
+                            <th>15 mins</th>
+                            <th>30 mins</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for strike, changes in call_data.items()|sort %}
+                        <tr>
+                            <td>{{ strike }}</td>
+                            <td class="{{ 'red-cell' if changes['10'] > 10 else '' }}">{{ "%.2f"|format(changes['10']) }}</td>
+                            <td class="{{ 'red-cell' if changes['15'] > 15 else '' }}">{{ "%.2f"|format(changes['15']) }}</td>
+                            <td class="{{ 'red-cell' if changes['30'] > 25 else '' }}">{{ "%.2f"|format(changes['30']) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="table-container">
+                <h2>Put OI Change (%)</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Strike Price</th>
+                            <th>10 mins</th>
+                            <th>15 mins</th>
+                            <th>30 mins</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for strike, changes in put_data.items()|sort %}
+                        <tr>
+                            <td>{{ strike }}</td>
+                            <td class="{{ 'red-cell' if changes['10'] > 10 else '' }}">{{ "%.2f"|format(changes['10']) }}</td>
+                            <td class="{{ 'red-cell' if changes['15'] > 15 else '' }}">{{ "%.2f"|format(changes['15']) }}</td>
+                            <td class="{{ 'red-cell' if changes['30'] > 25 else '' }}">{{ "%.2f"|format(changes['30']) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
