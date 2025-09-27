@@ -17,6 +17,11 @@
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
         .header a { text-decoration: none; background-color: #0052cc; color: white; padding: 0.5rem 1rem; border-radius: 4px; }
         .header a:hover { background-color: #003d99; }
+        .error-message { background-color: #ffebe6; border: 1px solid #ff0000; color: #333; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; }
+        .controls { display: flex; gap: 1rem; align-items: flex-end; background: white; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex-wrap: wrap; }
+        .control-group { display: flex; flex-direction: column; }
+        .control-group label { margin-bottom: 0.5rem; font-size: 0.9rem; color: #555; }
+        .control-group select, .control-group input { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
     </style>
 </head>
 <body>
@@ -25,6 +30,32 @@
             <h1>OI Tracker Dashboard</h1>
             <a href="{{ url_for('logout') }}">Logout</a>
         </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="symbol-select">Select Index:</label>
+                <select id="symbol-select">
+                    <option value="NSE_INDEX|Nifty 50" selected>Nifty 50</option>
+                    <option value="NSE_INDEX|Nifty Bank">Nifty Bank</option>
+                    <option value="BSE_INDEX|SENSEX">Sensex</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="stock-symbol">Or Enter Stock Symbol:</label>
+                <input type="text" id="stock-symbol" placeholder="e.g., RELIANCE">
+            </div>
+            <div class="control-group">
+                <label for="expiry-date">Expiry Date:</label>
+                <select id="expiry-date"></select>
+            </div>
+        </div>
+
+        {% if error %}
+            <div class="error-message">
+                <p><strong>Error:</strong> {{ error }}</p>
+            </div>
+        {% endif %}
+
         <div class="grid">
             <div class="table-container">
                 <h2>Call OI Change (%)</h2>
@@ -32,20 +63,15 @@
                     <thead>
                         <tr>
                             <th>Strike Price</th>
+                            <th>3 mins</th>
+                            <th>5 mins</th>
                             <th>10 mins</th>
                             <th>15 mins</th>
                             <th>30 mins</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for strike, changes in call_data.items()|sort %}
-                        <tr>
-                            <td>{{ strike }}</td>
-                            <td class="{{ 'red-cell' if changes['10'] > 10 else '' }}">{{ "%.2f"|format(changes['10']) }}</td>
-                            <td class="{{ 'red-cell' if changes['15'] > 15 else '' }}">{{ "%.2f"|format(changes['15']) }}</td>
-                            <td class="{{ 'red-cell' if changes['30'] > 25 else '' }}">{{ "%.2f"|format(changes['30']) }}</td>
-                        </tr>
-                        {% endfor %}
+                    <tbody id="call-table-body">
+                        <!-- Rows will be populated by JavaScript -->
                     </tbody>
                 </table>
             </div>
@@ -55,24 +81,144 @@
                     <thead>
                         <tr>
                             <th>Strike Price</th>
+                            <th>3 mins</th>
+                            <th>5 mins</th>
                             <th>10 mins</th>
                             <th>15 mins</th>
                             <th>30 mins</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for strike, changes in put_data.items()|sort %}
-                        <tr>
-                            <td>{{ strike }}</td>
-                            <td class="{{ 'red-cell' if changes['10'] > 10 else '' }}">{{ "%.2f"|format(changes['10']) }}</td>
-                            <td class="{{ 'red-cell' if changes['15'] > 15 else '' }}">{{ "%.2f"|format(changes['15']) }}</td>
-                            <td class="{{ 'red-cell' if changes['30'] > 25 else '' }}">{{ "%.2f"|format(changes['30']) }}</td>
-                        </tr>
-                        {% endfor %}
+                    <tbody id="put-table-body">
+                        <!-- Rows will be populated by JavaScript -->
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const callTableBody = document.getElementById('call-table-body');
+            const putTableBody = document.getElementById('put-table-body');
+            const errorContainer = document.querySelector('.error-message');
+
+            const thresholds = { 3: 5, 5: 8, 10: 10, 15: 15, 30: 25 };
+
+            const updateTable = (tableBody, data) => {
+                // Clear existing rows
+                tableBody.innerHTML = '';
+
+                // Get sorted strikes
+                const sortedStrikes = Object.keys(data).sort((a, b) => parseFloat(a) - parseFloat(b));
+
+                for (const strike of sortedStrikes) {
+                    const changes = data[strike] || {};
+                    const row = document.createElement('tr');
+
+                    let rowHTML = `<td>${strike}</td>`;
+                    for (const interval of [3, 5, 10, 15, 30]) {
+                        const change = changes[interval] || 0;
+                        const isRed = change > thresholds[interval];
+                        rowHTML += `<td class="${isRed ? 'red-cell' : ''}">${change.toFixed(2)}</td>`;
+                    }
+                    row.innerHTML = rowHTML;
+                    tableBody.appendChild(row);
+                }
+            };
+
+            const symbolSelect = document.getElementById('symbol-select');
+            const stockSymbolInput = document.getElementById('stock-symbol');
+            const expiryDateSelect = document.getElementById('expiry-date');
+            let allInstruments = [];
+
+            const populateInstruments = (instruments) => {
+                symbolSelect.innerHTML = '';
+                instruments.forEach(inst => {
+                    const option = document.createElement('option');
+                    option.value = inst.key;
+                    option.textContent = inst.name;
+                    symbolSelect.appendChild(option);
+                });
+            };
+
+            const filterInstruments = () => {
+                const filterText = stockSymbolInput.value.trim().toUpperCase();
+                if (!filterText) {
+                    populateInstruments(allInstruments);
+                    return;
+                }
+                const filtered = allInstruments.filter(inst => inst.name.toUpperCase().includes(filterText));
+                populateInstruments(filtered);
+            };
+
+            const updateExpiryDates = (symbol) => {
+                fetch(`/api/expiry-dates?symbol=${encodeURIComponent(symbol)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        expiryDateSelect.innerHTML = ''; // Clear old options
+                        if (data.expiry_dates && data.expiry_dates.length > 0) {
+                            data.expiry_dates.forEach(date => {
+                                const option = document.createElement('option');
+                                option.value = date;
+                                option.textContent = date;
+                                expiryDateSelect.appendChild(option);
+                            });
+                            fetchData(); // Fetch data for the first expiry
+                        } else {
+                            callTableBody.innerHTML = '';
+                            putTableBody.innerHTML = '';
+                        }
+                    });
+            };
+
+            const fetchData = () => {
+                const symbol = symbolSelect.value;
+                const expiry = expiryDateSelect.value;
+
+                if (!symbol || !expiry) return;
+
+                const apiUrl = `/api/data?symbol=${encodeURIComponent(symbol)}&expiry=${expiry}`;
+
+                fetch(apiUrl)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            errorContainer.innerHTML = `<p><strong>Error:</strong> ${data.error}</p>`;
+                            errorContainer.style.display = 'block';
+                            callTableBody.innerHTML = '';
+                            putTableBody.innerHTML = '';
+                        } else {
+                            errorContainer.style.display = 'none';
+                            updateTable(callTableBody, data.call_data);
+                            updateTable(putTableBody, data.put_data);
+                        }
+                    })
+                    .catch(error => {
+                        errorContainer.innerHTML = `<p><strong>Error:</strong> Could not connect to the server.</p>`;
+                        errorContainer.style.display = 'block';
+                    });
+            };
+
+            const handleSymbolChange = () => {
+                updateExpiryDates(symbolSelect.value);
+            };
+
+            // Event Listeners
+            symbolSelect.addEventListener('change', handleSymbolChange);
+            stockSymbolInput.addEventListener('input', filterInstruments); // Use 'input' for live filtering
+            expiryDateSelect.addEventListener('change', fetchData);
+
+            // Initial Load
+            fetch('/api/instruments')
+                .then(response => response.json())
+                .then(data => {
+                    allInstruments = data.instruments;
+                    populateInstruments(allInstruments);
+                    handleSymbolChange(); // Load expiries for the first instrument
+                });
+
+            setInterval(fetchData, 60000); // Refresh every 60 seconds
+        });
+    </script>
 </body>
 </html>

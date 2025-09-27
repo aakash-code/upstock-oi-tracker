@@ -1,18 +1,79 @@
 import upstox_client
 from upstox_client.rest import ApiException
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
+import urllib.request
+import gzip
+import json
+import io
 
-# --- Constants ---
-underlying_instrument = "NSE_INDEX|Nifty 50"
-# Hardcoded expiry for simplicity. In a real application, this should be dynamic.
-expiry_date = "2025-12-31"
+# --- Cache for instruments ---
+instrument_cache = None
+
+def get_tradable_instruments():
+    """
+    Fetches and filters all tradable F&O instruments from the Upstox instruments list using the NFO JSON file.
+    Caches the result in memory to avoid repeated downloads.
+    """
+    global instrument_cache
+    if instrument_cache is not None:
+        return instrument_cache
+
+    try:
+        INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NFO.json.gz"
+
+        with urllib.request.urlopen(INSTRUMENTS_URL) as response:
+            compressed_file = io.BytesIO(response.read())
+            with gzip.GzipFile(fileobj=compressed_file, mode='r') as decompressed_file:
+                data = json.load(decompressed_file)
+
+            underlyings = {row.get('underlying_symbol'): row.get('underlying_key') for row in data if row.get('instrument_type') == 'OPTSTK' and row.get('underlying_symbol')}
+
+            main_indices = {
+                "Nifty 50": "NSE_INDEX|Nifty 50",
+                "Nifty Bank": "NSE_INDEX|Nifty Bank",
+                "Sensex": "BSE_INDEX|SENSEX"
+            }
+
+            instrument_list = [{'name': name, 'key': key} for name, key in main_indices.items()]
+            for name, key in sorted(underlyings.items()):
+                if name not in main_indices:
+                     instrument_list.append({'name': name, 'key': key})
+
+            instrument_cache = instrument_list
+            return instrument_cache
+
+    except Exception as e:
+        print(f"Error fetching dynamic tradable instruments: {e}. Falling back to a hardcoded list.")
+        instrument_cache = [
+            {'name': 'Nifty 50', 'key': 'NSE_INDEX|Nifty 50'},
+            {'name': 'Nifty Bank', 'key': 'NSE_INDEX|Nifty Bank'},
+            {'name': 'Sensex', 'key': 'BSE_INDEX|SENSEX'},
+        ]
+        return instrument_cache
 
 def get_api_client(access_token):
     """Creates and returns an Upstox API client instance."""
     configuration = upstox_client.Configuration()
     configuration.access_token = access_token
     return upstox_client.ApiClient(configuration)
+
+def get_available_expiry_dates(api_client, instrument_key):
+    """Fetches all available expiry dates for a given instrument and filters for future dates."""
+    api_instance = upstox_client.ExpiredInstrumentApi(api_client)
+    try:
+        api_response = api_instance.get_expiries(instrument_key)
+        if not api_response.data:
+            return []
+
+        # Filter for dates that are today or in the future
+        today = datetime.now().date()
+        future_dates = [d for d in api_response.data if datetime.strptime(d, '%Y-%m-%d').date() >= today]
+        return sorted(future_dates)
+
+    except ApiException as e:
+        print(f"Error fetching expiry dates for {instrument_key}: {e}")
+        return []
 
 def get_ltp(api_client, instrument_key):
     """Fetches the Last Traded Price (LTP) for a given instrument key."""
@@ -22,7 +83,7 @@ def get_ltp(api_client, instrument_key):
         instrument_key_for_dict = instrument_key.replace('|', ':')
         return api_response.data[instrument_key_for_dict].last_price
     except ApiException as e:
-        print(f"Error fetching LTP: {e}")
+        print(f"Error fetching LTP for {instrument_key}: {e}")
         return None
 
 def get_option_chain(api_client, instrument_key, expiry):
@@ -32,7 +93,7 @@ def get_option_chain(api_client, instrument_key, expiry):
         api_response = api_instance.get_put_call_option_chain(instrument_key, expiry)
         return api_response.data
     except ApiException as e:
-        print(f"Error fetching option chain for {expiry}: {e}")
+        print(f"Error fetching option chain for {instrument_key} on {expiry}: {e}")
         return None
 
 def find_atm_strike(ltp, strikes):
@@ -40,12 +101,12 @@ def find_atm_strike(ltp, strikes):
     return min(strikes, key=lambda x: abs(x - ltp))
 
 def get_relevant_strikes(atm_strike, strikes):
-    """Gets the ATM, 2 ITM, and 2 OTM strikes."""
+    """Gets the ATM, 3 ITM, and 3 OTM strikes."""
     strikes.sort()
     try:
         atm_index = strikes.index(atm_strike)
-        start_index = max(0, atm_index - 2)
-        end_index = min(len(strikes), atm_index + 3)
+        start_index = max(0, atm_index - 3)
+        end_index = min(len(strikes), atm_index + 4)
         return strikes[start_index:end_index]
     except (ValueError, IndexError):
         return []
@@ -67,16 +128,25 @@ def calculate_oi_change(initial_oi, current_oi):
         return 0.0
     return ((current_oi - initial_oi) / initial_oi) * 100
 
-def get_oi_data(access_token):
+def get_oi_data(access_token, symbol, expiry_date):
     """The main function to fetch and process all OI data."""
     api_client = get_api_client(access_token)
 
-    ltp = get_ltp(api_client, underlying_instrument)
-    if not ltp:
+    if not expiry_date:
+        # If no expiry is provided, fetch all and use the first one (nearest)
+        available_expiries = get_available_expiry_dates(api_client, symbol)
+        if not available_expiries:
+            print(f"Could not find any available expiry dates for {symbol}.")
+            return None
+        expiry_date = available_expiries[0]
+
+    ltp = get_ltp(api_client, symbol)
+    if ltp is None:
         return None
 
-    option_chain = get_option_chain(api_client, underlying_instrument, expiry_date)
-    if not option_chain:
+    option_chain = get_option_chain(api_client, symbol, expiry_date)
+    if not option_chain or not hasattr(option_chain[0], 'put_options') or not option_chain[0].put_options:
+        print(f"Could not get a valid option chain for {symbol} on {expiry_date}")
         return None
 
     all_strikes = sorted(list(set([strike.strike_price for strike in option_chain[0].put_options])))
@@ -86,42 +156,57 @@ def get_oi_data(access_token):
     call_instruments = {s.strike_price: s.instrument_key for s in option_chain[0].call_options if s.strike_price in relevant_strikes}
     put_instruments = {s.strike_price: s.instrument_key for s in option_chain[0].put_options if s.strike_price in relevant_strikes}
 
-    # Using a single data store for simplicity in this context
-    oi_data_store = {}
-    current_time = datetime.now()
-
-    for strike_price in relevant_strikes:
-        for option_type, instruments in [("call", call_instruments), ("put", put_instruments)]:
-            if strike_price in instruments:
-                instrument_key = instruments[strike_price]
-
-                if instrument_key not in oi_data_store:
-                    oi_data_store[instrument_key] = {'type': option_type, 'strike': strike_price, 'data': []}
-
-                oi_data = get_historical_oi_data(api_client, instrument_key)
-                if oi_data:
-                    latest_oi = oi_data[-1][6]
-                    # For a web app, we'd typically use a proper database or cache
-                    # Here we just append to a list for one-time calculation
-                    oi_data_store[instrument_key]['data'].append((current_time, latest_oi))
-
-    # --- Process Data for Display ---
     call_table_data = {}
     put_table_data = {}
+    time_intervals = [3, 5, 10, 15, 30]
 
-    for key, value in oi_data_store.items():
-        changes = {}
-        # In a real app, you would fetch and compare against stored historical data
-        # For this example, we'll simulate by just showing the latest OI
-        # The logic for 10, 15, 30 min changes would require a persistent data store
-        # which is beyond the scope of this refactoring.
-        # We will just return the latest OI for now.
-        latest_oi = value['data'][-1][1] if value['data'] else 0
-        changes = {'10': latest_oi, '15': latest_oi, '30': latest_oi} # Placeholder
+    for strike_price in relevant_strikes:
+        # Process Call options
+        if strike_price in call_instruments:
+            instrument_key = call_instruments[strike_price]
+            all_candles = get_historical_oi_data(api_client, instrument_key)
+            if all_candles:
+                df = pd.DataFrame(all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'oi'])
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                df = df.set_index('timestamp')
 
-        if value['type'] == 'call':
-            call_table_data[value['strike']] = changes
-        else:
-            put_table_data[value['strike']] = changes
+                if not df.empty:
+                    current_candle = df.iloc[-1]
+                    current_oi = current_candle['oi']
+
+                    changes = {}
+                    for minutes_ago in time_intervals:
+                        target_time = current_candle.name - timedelta(minutes=minutes_ago)
+                        past_candle_index = df.index.get_indexer([target_time], method='nearest')
+                        if past_candle_index[0] != -1:
+                            past_candle = df.iloc[past_candle_index[0]]
+                            initial_oi = past_candle['oi']
+                            changes[minutes_ago] = calculate_oi_change(initial_oi, current_oi)
+
+                    call_table_data[strike_price] = changes
+
+        # Process Put options
+        if strike_price in put_instruments:
+            instrument_key = put_instruments[strike_price]
+            all_candles = get_historical_oi_data(api_client, instrument_key)
+            if all_candles:
+                df = pd.DataFrame(all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'oi'])
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                df = df.set_index('timestamp')
+
+                if not df.empty:
+                    current_candle = df.iloc[-1]
+                    current_oi = current_candle['oi']
+
+                    changes = {}
+                    for minutes_ago in time_intervals:
+                        target_time = current_candle.name - timedelta(minutes=minutes_ago)
+                        past_candle_index = df.index.get_indexer([target_time], method='nearest')
+                        if past_candle_index[0] != -1:
+                            past_candle = df.iloc[past_candle_index[0]]
+                            initial_oi = past_candle['oi']
+                            changes[minutes_ago] = calculate_oi_change(initial_oi, current_oi)
+
+                    put_table_data[strike_price] = changes
 
     return call_table_data, put_table_data
