@@ -51,27 +51,29 @@ def callback():
 
 import tracker_logic
 
+from flask import jsonify
+
 @app.route('/dashboard')
 def dashboard():
-    """Displays the main dashboard with OI data. Requires login."""
+    """Renders the main dashboard page."""
     if 'access_token' not in session:
         return redirect(url_for('index'))
+    return render_template('dashboard.html')
+
+@app.route('/api/data')
+def api_data():
+    """API endpoint to fetch the latest OI data."""
+    if 'access_token' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
 
     access_token = session['access_token']
-
-    # Fetch the OI data using the logic from our tracker_logic file
     data = tracker_logic.get_oi_data(access_token)
 
     if data is None:
-        # Handle cases where the API call fails (e.g., invalid token)
-        call_data, put_data = {}, {}
-        error_message = "Could not fetch data. Your access token may be invalid or expired. Please try logging out and back in again."
-        return render_template('dashboard.html', call_data=call_data, put_data=put_data, error=error_message)
+        return jsonify({'error': 'Could not fetch data from Upstox API. Your token may be invalid.'}), 500
 
     call_data, put_data = data
-
-    # Render the dashboard template with the fetched data
-    return render_template('dashboard.html', call_data=call_data, put_data=put_data)
+    return jsonify({'call_data': call_data, 'put_data': put_data})
 
 @app.route('/logout')
 def logout():

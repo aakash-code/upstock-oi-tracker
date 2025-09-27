@@ -44,15 +44,8 @@
                             <th>30 mins</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for strike, changes in call_data.items()|sort %}
-                        <tr>
-                            <td>{{ strike }}</td>
-                            <td class="{{ 'red-cell' if changes['10'] > 10 else '' }}">{{ "%.2f"|format(changes['10']) }}</td>
-                            <td class="{{ 'red-cell' if changes['15'] > 15 else '' }}">{{ "%.2f"|format(changes['15']) }}</td>
-                            <td class="{{ 'red-cell' if changes['30'] > 25 else '' }}">{{ "%.2f"|format(changes['30']) }}</td>
-                        </tr>
-                        {% endfor %}
+                    <tbody id="call-table-body">
+                        <!-- Rows will be populated by JavaScript -->
                     </tbody>
                 </table>
             </div>
@@ -67,19 +60,71 @@
                             <th>30 mins</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for strike, changes in put_data.items()|sort %}
-                        <tr>
-                            <td>{{ strike }}</td>
-                            <td class="{{ 'red-cell' if changes['10'] > 10 else '' }}">{{ "%.2f"|format(changes['10']) }}</td>
-                            <td class="{{ 'red-cell' if changes['15'] > 15 else '' }}">{{ "%.2f"|format(changes['15']) }}</td>
-                            <td class="{{ 'red-cell' if changes['30'] > 25 else '' }}">{{ "%.2f"|format(changes['30']) }}</td>
-                        </tr>
-                        {% endfor %}
+                    <tbody id="put-table-body">
+                        <!-- Rows will be populated by JavaScript -->
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const callTableBody = document.getElementById('call-table-body');
+            const putTableBody = document.getElementById('put-table-body');
+            const errorContainer = document.querySelector('.error-message');
+
+            const thresholds = { 10: 10, 15: 15, 30: 25 };
+
+            const updateTable = (tableBody, data) => {
+                // Clear existing rows
+                tableBody.innerHTML = '';
+
+                // Get sorted strikes
+                const sortedStrikes = Object.keys(data).sort((a, b) => a - b);
+
+                for (const strike of sortedStrikes) {
+                    const changes = data[strike];
+                    const row = document.createElement('tr');
+
+                    let rowHTML = `<td>${strike}</td>`;
+                    for (const interval of [10, 15, 30]) {
+                        const change = changes[interval] || 0;
+                        const isRed = change > thresholds[interval];
+                        rowHTML += `<td class="${isRed ? 'red-cell' : ''}">${change.toFixed(2)}</td>`;
+                    }
+                    row.innerHTML = rowHTML;
+                    tableBody.appendChild(row);
+                }
+            };
+
+            const fetchData = () => {
+                fetch('/api/data')
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.error) {
+                            errorContainer.innerHTML = `<p><strong>Error:</strong> ${data.error}</p>`;
+                            errorContainer.style.display = 'block';
+                        } else {
+                            errorContainer.style.display = 'none';
+                            updateTable(callTableBody, data.call_data);
+                            updateTable(putTableBody, data.put_data);
+                        }
+                    })
+                    .catch(error => {
+                        errorContainer.innerHTML = `<p><strong>Error:</strong> Could not connect to the server. Please check if the application is running.</p>`;
+                        errorContainer.style.display = 'block';
+                    });
+            };
+
+            fetchData(); // Initial fetch
+            setInterval(fetchData, 60000); // Refresh every 60 seconds
+        });
+    </script>
 </body>
 </html>
