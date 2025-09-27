@@ -18,16 +18,33 @@
 <body>
     <div class="container">
         <h1>Upstox OI Tracker</h1>
-        <p>Please enter your API credentials to begin.</p>
-        <form action="/login" method="post">
-            <label for="api_key">API Key:</label>
-            <input type="text" id="api_key" name="api_key" required>
 
-            <label for="api_secret">API Secret:</label>
-            <input type="password" id="api_secret" name="api_secret" required>
+        <div class="login-option">
+            <h2>Option 1: Login with API Credentials</h2>
+            <p>Enter your API Key and Secret to go through the standard login flow.</p>
+            <form action="/login" method="post">
+                <label for="api_key">API Key:</label>
+                <input type="text" id="api_key" name="api_key" required>
 
-            <input type="submit" value="Login with Upstox">
-        </form>
+                <label for="api_secret">API Secret:</label>
+                <input type="password" id="api_secret" name="api_secret" required>
+
+                <input type="submit" value="Login with Upstox">
+            </form>
+        </div>
+
+        <hr>
+
+        <div class="login-option">
+            <h2>Option 2: Use an Existing Access Token</h2>
+            <p>If you already have a valid access token, paste it here.</p>
+            <form action="/token_login" method="post">
+                <label for="access_token">Access Token:</label>
+                <input type="text" id="access_token" name="access_token" required style="width: 100%;">
+
+                <input type="submit" value="Go to Dashboard">
+            </form>
+        </div>
     </div>
 </body>
 </html>

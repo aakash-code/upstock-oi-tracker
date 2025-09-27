@@ -10,9 +10,15 @@ def index():
     """Renders the home page with the credential input form."""
     return render_template('index.html')
 
+@app.route('/token_login', methods=['POST'])
+def token_login():
+    """Handles the access token form submission."""
+    session['access_token'] = request.form['access_token']
+    return redirect(url_for('dashboard'))
+
 @app.route('/login', methods=['POST'])
 def login():
-    """Handles the login form submission and redirects to Upstox."""
+    """Handles the API credentials form submission and redirects to Upstox."""
     session['api_key'] = request.form['api_key']
     session['api_secret'] = request.form['api_secret']
 
