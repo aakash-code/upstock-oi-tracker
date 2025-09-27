@@ -1,3 +1,4 @@
 upstox-python-sdk
 pandas
 rich
+Flask
