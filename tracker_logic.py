@@ -2,78 +2,77 @@ import upstox_client
 from upstox_client.rest import ApiException
 from datetime import datetime, timedelta
 import pandas as pd
-import urllib.request
-import gzip
-import json
-import io
+import sqlite3
 
-# --- Cache for instruments ---
-instrument_cache = None
+# --- Database-backed Logic ---
 
 def get_tradable_instruments():
     """
-    Fetches and filters all tradable F&O instruments from the Upstox instruments list using the NFO JSON file.
-    Caches the result in memory to avoid repeated downloads.
+    Fetches the list of tradable F&O instruments directly from the local database.
     """
-    global instrument_cache
-    if instrument_cache is not None:
-        return instrument_cache
-
     try:
-        INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NFO.json.gz"
+        conn = sqlite3.connect('instruments.db')
+        cursor = conn.cursor()
 
-        with urllib.request.urlopen(INSTRUMENTS_URL) as response:
-            compressed_file = io.BytesIO(response.read())
-            with gzip.GzipFile(fileobj=compressed_file, mode='r') as decompressed_file:
-                data = json.load(decompressed_file)
+        # Query for unique underlying symbols and keys
+        cursor.execute("SELECT DISTINCT underlying_symbol, underlying_key FROM fno_instruments WHERE underlying_symbol IS NOT NULL ORDER BY underlying_symbol")
+        rows = cursor.fetchall()
 
-            underlyings = {row.get('underlying_symbol'): row.get('underlying_key') for row in data if row.get('instrument_type') == 'OPTSTK' and row.get('underlying_symbol')}
+        underlyings = {row[0]: row[1] for row in rows}
 
-            main_indices = {
-                "Nifty 50": "NSE_INDEX|Nifty 50",
-                "Nifty Bank": "NSE_INDEX|Nifty Bank",
-                "Sensex": "BSE_INDEX|SENSEX"
-            }
+        main_indices = {
+            "Nifty 50": "NSE_INDEX|Nifty 50",
+            "Nifty Bank": "NSE_INDEX|Nifty Bank",
+            "Sensex": "BSE_INDEX|SENSEX"
+        }
 
-            instrument_list = [{'name': name, 'key': key} for name, key in main_indices.items()]
-            for name, key in sorted(underlyings.items()):
-                if name not in main_indices:
-                     instrument_list.append({'name': name, 'key': key})
+        # Combine and format the list
+        instrument_list = [{'name': name, 'key': key} for name, key in main_indices.items()]
+        for name, key in underlyings.items():
+            if name not in main_indices:
+                 instrument_list.append({'name': name, 'key': key})
 
-            instrument_cache = instrument_list
-            return instrument_cache
+        return instrument_list
 
-    except Exception as e:
-        print(f"Error fetching dynamic tradable instruments: {e}. Falling back to a hardcoded list.")
-        instrument_cache = [
+    except sqlite3.Error as e:
+        print(f"Database error in get_tradable_instruments: {e}. Falling back to a hardcoded list.")
+        return [
             {'name': 'Nifty 50', 'key': 'NSE_INDEX|Nifty 50'},
             {'name': 'Nifty Bank', 'key': 'NSE_INDEX|Nifty Bank'},
             {'name': 'Sensex', 'key': 'BSE_INDEX|SENSEX'},
         ]
-        return instrument_cache
+    finally:
+        if conn:
+            conn.close()
+
+def get_available_expiry_dates(symbol_key):
+    """Fetches available future expiry dates for a symbol from the local database."""
+    try:
+        conn = sqlite3.connect('instruments.db')
+        cursor = conn.cursor()
+
+        today = datetime.now().strftime('%Y-%m-%d')
+
+        # Query for future expiry dates for the given symbol
+        cursor.execute("SELECT DISTINCT expiry FROM fno_instruments WHERE underlying_key = ? AND expiry >= ? ORDER BY expiry", (symbol_key, today))
+        rows = cursor.fetchall()
+
+        return [row[0] for row in rows]
+
+    except sqlite3.Error as e:
+        print(f"Database error in get_available_expiry_dates: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+# --- API-based Logic (for live data) ---
 
 def get_api_client(access_token):
     """Creates and returns an Upstox API client instance."""
     configuration = upstox_client.Configuration()
     configuration.access_token = access_token
     return upstox_client.ApiClient(configuration)
-
-def get_available_expiry_dates(api_client, instrument_key):
-    """Fetches all available expiry dates for a given instrument and filters for future dates."""
-    api_instance = upstox_client.ExpiredInstrumentApi(api_client)
-    try:
-        api_response = api_instance.get_expiries(instrument_key)
-        if not api_response.data:
-            return []
-
-        # Filter for dates that are today or in the future
-        today = datetime.now().date()
-        future_dates = [d for d in api_response.data if datetime.strptime(d, '%Y-%m-%d').date() >= today]
-        return sorted(future_dates)
-
-    except ApiException as e:
-        print(f"Error fetching expiry dates for {instrument_key}: {e}")
-        return []
 
 def get_ltp(api_client, instrument_key):
     """Fetches the Last Traded Price (LTP) for a given instrument key."""
@@ -86,15 +85,18 @@ def get_ltp(api_client, instrument_key):
         print(f"Error fetching LTP for {instrument_key}: {e}")
         return None
 
-def get_option_chain(api_client, instrument_key, expiry):
-    """Fetches the option chain for a given instrument key and expiry."""
-    api_instance = upstox_client.OptionsApi(api_client)
+def get_historical_oi_data(api_client, instrument_key, interval='1minute'):
+    """Fetches historical Open Interest (OI) data for a given instrument key."""
+    history_api = upstox_client.HistoryApi(api_client)
+    to_date = datetime.now().strftime('%Y-%m-%d')
     try:
-        api_response = api_instance.get_put_call_option_chain(instrument_key, expiry)
-        return api_response.data
+        api_response = history_api.get_intra_day_candle_data1(instrument_key, interval, "v2")
+        return api_response.data.candles
     except ApiException as e:
-        print(f"Error fetching option chain for {instrument_key} on {expiry}: {e}")
+        print(f"Error fetching historical OI for {instrument_key}: {e}")
         return None
+
+# --- Main Data Processing ---
 
 def find_atm_strike(ltp, strikes):
     """Finds the At-The-Money (ATM) strike price."""
@@ -111,17 +113,6 @@ def get_relevant_strikes(atm_strike, strikes):
     except (ValueError, IndexError):
         return []
 
-def get_historical_oi_data(api_client, instrument_key, interval='1minute'):
-    """Fetches historical Open Interest (OI) data for a given instrument key."""
-    history_api = upstox_client.HistoryApi(api_client)
-    to_date = datetime.now().strftime('%Y-%m-%d')
-    try:
-        api_response = history_api.get_intra_day_candle_data1(instrument_key, interval, "v2")
-        return api_response.data.candles
-    except ApiException as e:
-        print(f"Error fetching historical OI for {instrument_key}: {e}")
-        return None
-
 def calculate_oi_change(initial_oi, current_oi):
     """Calculates the percentage change in Open Interest."""
     if initial_oi is None or current_oi is None or initial_oi == 0:
@@ -129,12 +120,11 @@ def calculate_oi_change(initial_oi, current_oi):
     return ((current_oi - initial_oi) / initial_oi) * 100
 
 def get_oi_data(access_token, symbol, expiry_date):
-    """The main function to fetch and process all OI data."""
+    """The main function to fetch and process all OI data, using the local database."""
     api_client = get_api_client(access_token)
 
     if not expiry_date:
-        # If no expiry is provided, fetch all and use the first one (nearest)
-        available_expiries = get_available_expiry_dates(api_client, symbol)
+        available_expiries = get_available_expiry_dates(symbol)
         if not available_expiries:
             print(f"Could not find any available expiry dates for {symbol}.")
             return None
@@ -144,17 +134,43 @@ def get_oi_data(access_token, symbol, expiry_date):
     if ltp is None:
         return None
 
-    option_chain = get_option_chain(api_client, symbol, expiry_date)
-    if not option_chain or not hasattr(option_chain[0], 'put_options') or not option_chain[0].put_options:
-        print(f"Could not get a valid option chain for {symbol} on {expiry_date}")
+    try:
+        conn = sqlite3.connect('instruments.db')
+        cursor = conn.cursor()
+
+        # Get all strikes for the selected symbol and expiry
+        cursor.execute("SELECT DISTINCT strike FROM fno_instruments WHERE underlying_key = ? AND expiry = ? ORDER BY strike", (symbol, expiry_date))
+        all_strikes = [row[0] for row in cursor.fetchall()]
+
+        if not all_strikes:
+            print(f"No strikes found in DB for {symbol} on {expiry_date}")
+            return None
+
+        atm_strike = find_atm_strike(ltp, all_strikes)
+        relevant_strikes = get_relevant_strikes(atm_strike, all_strikes)
+
+        # Get instrument keys for the relevant strikes directly from the DB
+        placeholders = ','.join('?' for _ in relevant_strikes)
+        cursor.execute(f"SELECT strike, instrument_key, instrument_type FROM fno_instruments WHERE underlying_key = ? AND expiry = ? AND strike IN ({placeholders})", [symbol, expiry_date] + relevant_strikes)
+        rows = cursor.fetchall()
+
+        call_instruments = {row[0]: row[1] for row in rows if row[2] == 'OPTIDX' or row[2] == 'OPTSTK'}
+        put_instruments = {row[0]: row[1] for row in rows if row[2] == 'OPTIDX' or row[2] == 'OPTSTK'}
+
+        # Note: The above logic incorrectly assigns the same key to both call and put.
+        # A proper schema would differentiate them. For now, we'll assume the API calls handle it.
+        # A better DB query would be needed for a perfect system.
+        # Let's refine the instrument key fetching
+        call_instruments = {row[0]: row[1] for row in rows if 'CE' in row[1]}
+        put_instruments = {row[0]: row[1] for row in rows if 'PE' in row[1]}
+
+
+    except sqlite3.Error as e:
+        print(f"Database error in get_oi_data: {e}")
         return None
-
-    all_strikes = sorted(list(set([strike.strike_price for strike in option_chain[0].put_options])))
-    atm_strike = find_atm_strike(ltp, all_strikes)
-    relevant_strikes = get_relevant_strikes(atm_strike, all_strikes)
-
-    call_instruments = {s.strike_price: s.instrument_key for s in option_chain[0].call_options if s.strike_price in relevant_strikes}
-    put_instruments = {s.strike_price: s.instrument_key for s in option_chain[0].put_options if s.strike_price in relevant_strikes}
+    finally:
+        if conn:
+            conn.close()
 
     call_table_data = {}
     put_table_data = {}

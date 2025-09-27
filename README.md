@@ -61,6 +61,23 @@ Install the required Python libraries using the `requirements.txt` file.
 pip install -r requirements.txt
 ```
 
+### 5. Set Up the Local Database
+
+This application uses a local SQLite database for high performance and reliability. You only need to set this up once.
+
+**a. Create the Database File:**
+Run the `database_setup.py` script to create the `instruments.db` file and the necessary tables.
+```bash
+python database_setup.py
+```
+
+**b. Download Contracts and Populate the Database:**
+Run the `download_contracts.py` script. This will download the latest list of all F&O instruments from Upstox and save them to your local database.
+```bash
+python download_contracts.py
+```
+*(Note: It is recommended to run this script periodically, e.g., once a day, to keep your instrument list up-to-date with the latest contracts.)*
+
 ## How to Run the Application
 
 1.  **Activate your virtual environment** if you haven't already.
