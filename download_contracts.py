@@ -3,14 +3,15 @@ import urllib.request
 import gzip
 import json
 import io
+import database
 
-def download_and_populate_contracts():
+def populate_instruments_from_file():
     """
     Downloads the NFO instruments file from Upstox, parses it,
     and populates the SQLite database.
     """
     INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/NFO.json.gz"
-    conn = None  # Initialize conn to None
+    conn = None  # Initialize conn to None to prevent UnboundLocalError
 
     try:
         print("Starting download of NFO instrument list...")
@@ -21,17 +22,14 @@ def download_and_populate_contracts():
                 data = json.load(decompressed_file)
         print("Parsing complete.")
 
-        # Connect to the database
-        conn = sqlite3.connect('instruments.db')
+        conn = database.get_db_connection()
         cursor = conn.cursor()
 
-        # Clear the table before inserting new data
-        cursor.execute('DELETE FROM fno_instruments')
-        print("Old data cleared from 'fno_instruments' table.")
+        cursor.execute('DELETE FROM instruments')
+        print("Old data cleared from 'instruments' table.")
 
         contracts_to_insert = []
         for row in data:
-            # Prepare a tuple with the data for insertion
             contract_data = (
                 row.get('instrument_key'),
                 row.get('exchange'),
@@ -45,9 +43,8 @@ def download_and_populate_contracts():
             )
             contracts_to_insert.append(contract_data)
 
-        # Use executemany for efficient bulk insertion
         cursor.executemany('''
-            INSERT INTO fno_instruments (
+            INSERT INTO instruments (
                 instrument_key, exchange, tradingsymbol, name, underlying_key,
                 underlying_symbol, instrument_type, expiry, strike
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -56,7 +53,7 @@ def download_and_populate_contracts():
         print(f"Successfully inserted {len(contracts_to_insert)} contracts into the database.")
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"An error occurred during contract download: {e}")
     finally:
         if conn:
             conn.commit()
@@ -64,4 +61,4 @@ def download_and_populate_contracts():
             print("Database connection closed.")
 
 if __name__ == '__main__':
-    download_and_populate_contracts()
+    populate_instruments_from_file()

@@ -1,57 +1,18 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import upstox_client
+import database
+import logic
 
 app = Flask(__name__)
-app.secret_key = 'your_very_secret_key'  # In a real app, use a more secure key and load it from config
-REDIRECT_URI = "http://127.0.0.1:5000/callback" # The callback URL for the Flask app
+# In a real app, this key should be loaded from a secure config file
+app.secret_key = 'a_very_secret_key_that_should_be_changed'
+
+# --- Main Page Routes ---
 
 @app.route('/')
 def index():
-    """Renders the home page with the credential input form."""
+    """Renders the login page."""
     return render_template('index.html')
-
-@app.route('/token_login', methods=['POST'])
-def token_login():
-    """Handles the access token form submission."""
-    session['access_token'] = request.form['access_token']
-    return redirect(url_for('dashboard'))
-
-@app.route('/login', methods=['POST'])
-def login():
-    """Handles the API credentials form submission and redirects to Upstox."""
-    session['api_key'] = request.form['api_key']
-    session['api_secret'] = request.form['api_secret']
-
-    api_instance = upstox_client.LoginApi()
-    # Note: The state parameter is optional and can be used for security purposes
-    response = api_instance.authorize(session['api_key'], REDIRECT_URI, "v2")
-
-    # Redirect the user to the Upstox login page
-    return redirect(response)
-
-@app.route('/callback')
-def callback():
-    """Handles the callback from Upstox and gets the access token."""
-    api_instance = upstox_client.LoginApi()
-    code = request.args.get('code')
-
-    try:
-        response = api_instance.token(
-            api_version="v2",
-            code=code,
-            client_id=session['api_key'],
-            client_secret=session['api_secret'],
-            redirect_uri=REDIRECT_URI,
-            grant_type='authorization_code'
-        )
-        session['access_token'] = response.access_token
-        return redirect(url_for('dashboard'))
-    except upstox_client.rest.ApiException as e:
-        return f"<h1>Error</h1><p>Could not retrieve access token. Please try logging in again.</p><p>Details: {e}</p>"
-
-import tracker_logic
-
-from flask import jsonify
 
 @app.route('/dashboard')
 def dashboard():
@@ -60,53 +21,102 @@ def dashboard():
         return redirect(url_for('index'))
     return render_template('dashboard.html')
 
+# --- Authentication Routes ---
+
+@app.route('/callback')
+def callback():
+    """Handles the OAuth callback from Upstox and gets the access token."""
+    code = request.args.get('code')
+    api_key = session.get('api_key')
+    api_secret = session.get('api_secret')
+    # The redirect URI must match exactly what is configured in the Upstox App
+    redirect_uri = url_for('callback', _external=True)
+
+    if not all([code, api_key, api_secret]):
+        return "Error: Missing required session data or callback code.", 400
+
+    try:
+        api_instance = upstox_client.LoginApi()
+        response = api_instance.token(
+            api_version="v2",
+            code=code,
+            client_id=api_key,
+            client_secret=api_secret,
+            redirect_uri=redirect_uri,
+            grant_type='authorization_code'
+        )
+        session['access_token'] = response.access_token
+        return redirect(url_for('dashboard'))
+
+    except upstox_client.rest.ApiException as e:
+        print(f"API Exception during token exchange: {e}")
+        return "Error: Could not obtain access token from Upstox.", 500
+
+@app.route('/login', methods=['POST'])
+def login():
+    """Handles the API credentials login flow by redirecting to Upstox."""
+    session['api_key'] = request.form.get('api_key')
+    session['api_secret'] = request.form.get('api_secret')
+
+    redirect_uri = url_for('callback', _external=True)
+
+    api_instance = upstox_client.LoginApi()
+    response = api_instance.authorize(session['api_key'], redirect_uri, "v2")
+
+    return redirect(response)
+
+@app.route('/token_login', methods=['POST'])
+def token_login():
+    """Handles direct access token login."""
+    session['access_token'] = request.form.get('access_token')
+    return redirect(url_for('dashboard'))
+
+@app.route('/logout')
+def logout():
+    """Logs the user out."""
+    session.clear()
+    return redirect(url_for('index'))
+
+# --- API Endpoints ---
+
 @app.route('/api/instruments')
 def api_instruments():
-    """API endpoint to fetch the list of tradable instruments."""
-    # This doesn't require authentication as it fetches public data
-    instruments = tracker_logic.get_tradable_instruments()
+    """API endpoint to get the list of tradable instruments."""
+    instruments = database.get_tradable_instruments()
     return jsonify({'instruments': instruments})
 
 @app.route('/api/expiry-dates')
 def api_expiry_dates():
-    """API endpoint to fetch available expiry dates for a symbol."""
-    if 'access_token' not in session:
-        return jsonify({'error': 'Not authenticated'}), 401
-
+    """API endpoint to get expiry dates for a symbol."""
     symbol = request.args.get('symbol')
     if not symbol:
         return jsonify({'error': 'Symbol parameter is required'}), 400
-
-    # The function now uses the database and doesn't need the api_client
-    dates = tracker_logic.get_available_expiry_dates(symbol)
-
+    dates = database.get_available_expiry_dates(symbol)
     return jsonify({'expiry_dates': dates})
 
 @app.route('/api/data')
 def api_data():
-    """API endpoint to fetch the latest OI data based on user selections."""
+    """
+    API endpoint to trigger an update and get the latest OI data.
+    This is the main endpoint called by the frontend to get live data.
+    """
     if 'access_token' not in session:
         return jsonify({'error': 'Not authenticated'}), 401
 
-    # Get parameters from the request, with fallbacks
-    symbol = request.args.get('symbol', 'NSE_INDEX|Nifty 50')
-    expiry = request.args.get('expiry') # The logic will handle a None expiry
+    symbol = request.args.get('symbol')
+    expiry = request.args.get('expiry')
 
-    access_token = session['access_token']
-    data = tracker_logic.get_oi_data(access_token, symbol, expiry)
+    if not all([symbol, expiry]):
+        return jsonify({'error': 'Symbol and expiry parameters are required'}), 400
 
-    if data is None:
-        return jsonify({'error': f"Could not fetch data for {symbol}. The symbol might be invalid or there's no data for the selected expiry."}), 500
+    logic.update_tracked_instruments(session['access_token'], symbol, expiry)
 
-    call_data, put_data = data
-    return jsonify({'call_data': call_data, 'put_data': put_data})
+    latest_results = database.get_latest_oi_results(symbol, expiry)
 
-@app.route('/logout')
-def logout():
-    """Logs the user out by clearing the session."""
-    session.clear()
-    return redirect(url_for('index'))
+    return jsonify(latest_results)
+
 
 if __name__ == '__main__':
-    # Note: For production, use a proper web server like Gunicorn or uWSGI
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Initialize the database if it doesn't exist
+    database.init_db()
+    app.run(debug=True, host='0.0.0.0', port=5000)
