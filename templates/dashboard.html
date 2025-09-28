@@ -1,224 +1,160 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OI Tracker Dashboard</title>
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Upstox OI Tracker{% endblock %}
+
+{% block head %}
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f0f2f5; color: #333; margin: 0; padding: 2rem; }
-        h1, h2 { color: #1d2129; }
-        .container { max-width: 1200px; margin: auto; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
-        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
-        th, td { padding: 1rem; text-align: right; border-bottom: 1px solid #ddd; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .controls { display: flex; gap: 1rem; align-items: flex-end; background: #f7f7f7; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+        .control-group { display: flex; flex-direction: column; }
+        .control-group label { margin-bottom: 0.5rem; font-size: 0.9rem; color: #555; font-weight: 600; }
+        .control-group select, .control-group input { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 2rem; }
+        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }
+        th, td { padding: 0.75rem 1rem; text-align: right; border-bottom: 1px solid #eee; }
         th { background-color: #f5f6f7; font-weight: 600; }
         td:first-child, th:first-child { text-align: left; font-weight: bold; color: #0052cc; }
-        .red-cell { background-color: #ffebe6; color: #ff0000; font-weight: bold; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
-        .header a { text-decoration: none; background-color: #0052cc; color: white; padding: 0.5rem 1rem; border-radius: 4px; }
-        .header a:hover { background-color: #003d99; }
-        .error-message { background-color: #ffebe6; border: 1px solid #ff0000; color: #333; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; }
-        .controls { display: flex; gap: 1rem; align-items: flex-end; background: white; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex-wrap: wrap; }
-        .control-group { display: flex; flex-direction: column; }
-        .control-group label { margin-bottom: 0.5rem; font-size: 0.9rem; color: #555; }
-        .control-group select, .control-group input { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+        .red-cell { background-color: #ffebe6 !important; color: #d93025; font-weight: bold; }
+        .error-message { background-color: #ffebe6; border: 1px solid #d93025; color: #333; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; }
     </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>OI Tracker Dashboard</h1>
-            <a href="{{ url_for('logout') }}">Logout</a>
-        </div>
+{% endblock %}
 
-        <div class="controls">
-            <div class="control-group">
-                <label for="symbol-select">Select Index:</label>
-                <select id="symbol-select">
-                    <option value="NSE_INDEX|Nifty 50" selected>Nifty 50</option>
-                    <option value="NSE_INDEX|Nifty Bank">Nifty Bank</option>
-                    <option value="BSE_INDEX|SENSEX">Sensex</option>
-                </select>
-            </div>
-            <div class="control-group">
-                <label for="stock-symbol">Or Enter Stock Symbol:</label>
-                <input type="text" id="stock-symbol" placeholder="e.g., RELIANCE">
-            </div>
-            <div class="control-group">
-                <label for="expiry-date">Expiry Date:</label>
-                <select id="expiry-date"></select>
-            </div>
-        </div>
+{% block content %}
+<div class="header">
+    <h1>OI Tracker Dashboard</h1>
+    <a href="{{ url_for('logout') }}">Logout</a>
+</div>
 
-        {% if error %}
-            <div class="error-message">
-                <p><strong>Error:</strong> {{ error }}</p>
-            </div>
-        {% endif %}
-
-        <div class="grid">
-            <div class="table-container">
-                <h2>Call OI Change (%)</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Strike Price</th>
-                            <th>3 mins</th>
-                            <th>5 mins</th>
-                            <th>10 mins</th>
-                            <th>15 mins</th>
-                            <th>30 mins</th>
-                        </tr>
-                    </thead>
-                    <tbody id="call-table-body">
-                        <!-- Rows will be populated by JavaScript -->
-                    </tbody>
-                </table>
-            </div>
-            <div class="table-container">
-                <h2>Put OI Change (%)</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Strike Price</th>
-                            <th>3 mins</th>
-                            <th>5 mins</th>
-                            <th>10 mins</th>
-                            <th>15 mins</th>
-                            <th>30 mins</th>
-                        </tr>
-                    </thead>
-                    <tbody id="put-table-body">
-                        <!-- Rows will be populated by JavaScript -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
+<div class="controls">
+    <div class="control-group">
+        <label for="symbol-select">Select Instrument:</label>
+        <select id="symbol-select"></select>
     </div>
+    <div class="control-group">
+        <label for="expiry-date">Expiry Date:</label>
+        <select id="expiry-date"></select>
+    </div>
+</div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const callTableBody = document.getElementById('call-table-body');
-            const putTableBody = document.getElementById('put-table-body');
-            const errorContainer = document.querySelector('.error-message');
+<div id="error-container" style="display: none;"></div>
 
-            const thresholds = { 3: 5, 5: 8, 10: 10, 15: 15, 30: 25 };
+<div class="grid">
+    <div class="table-container">
+        <h2>Call OI Change (%)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Strike Price</th>
+                    <th>3m</th><th>5m</th><th>10m</th><th>15m</th><th>30m</th>
+                </tr>
+            </thead>
+            <tbody id="call-table-body"></tbody>
+        </table>
+    </div>
+    <div class="table-container">
+        <h2>Put OI Change (%)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Strike Price</th>
+                    <th>3m</th><th>5m</th><th>10m</th><th>15m</th><th>30m</th>
+                </tr>
+            </thead>
+            <tbody id="put-table-body"></tbody>
+        </table>
+    </div>
+</div>
 
-            const updateTable = (tableBody, data) => {
-                // Clear existing rows
-                tableBody.innerHTML = '';
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const symbolSelect = document.getElementById('symbol-select');
+    const expirySelect = document.getElementById('expiry-date');
+    const callTableBody = document.getElementById('call-table-body');
+    const putTableBody = document.getElementById('put-table-body');
+    const errorContainer = document.getElementById('error-container');
 
-                // Get sorted strikes
-                const sortedStrikes = Object.keys(data).sort((a, b) => parseFloat(a) - parseFloat(b));
+    const thresholds = { 3: 5, 5: 8, 10: 10, 15: 15, 30: 25 };
 
-                for (const strike of sortedStrikes) {
-                    const changes = data[strike] || {};
-                    const row = document.createElement('tr');
+    function displayError(message) {
+        errorContainer.innerHTML = `<div class="error-message"><p><strong>Error:</strong> ${message}</p></div>`;
+        errorContainer.style.display = 'block';
+    }
 
-                    let rowHTML = `<td>${strike}</td>`;
-                    for (const interval of [3, 5, 10, 15, 30]) {
-                        const change = changes[interval] || 0;
-                        const isRed = change > thresholds[interval];
-                        rowHTML += `<td class="${isRed ? 'red-cell' : ''}">${change.toFixed(2)}</td>`;
-                    }
-                    row.innerHTML = rowHTML;
-                    tableBody.appendChild(row);
+    function clearError() {
+        errorContainer.style.display = 'none';
+    }
+
+    function updateTable(tableBody, data) {
+        tableBody.innerHTML = '';
+        const sortedStrikes = Object.keys(data).sort((a, b) => parseFloat(a) - parseFloat(b));
+        for (const strike of sortedStrikes) {
+            const changes = data[strike] || {};
+            const row = document.createElement('tr');
+            let rowHTML = `<td>${strike}</td>`;
+            for (const interval of [3, 5, 10, 15, 30]) {
+                const change = changes[interval] || 0;
+                const isRed = change > thresholds[interval];
+                rowHTML += `<td class="${isRed ? 'red-cell' : ''}">${change.toFixed(2)}</td>`;
+            }
+            row.innerHTML = rowHTML;
+            tableBody.appendChild(row);
+        }
+    }
+
+    function fetchData() {
+        const symbol = symbolSelect.value;
+        const expiry = expirySelect.value;
+        if (!symbol || !expiry) return;
+
+        clearError();
+        fetch(`/api/data?symbol=${encodeURIComponent(symbol)}&expiry=${expiry}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    displayError(data.error);
+                } else {
+                    updateTable(callTableBody, data.call_data);
+                    updateTable(putTableBody, data.put_data);
                 }
-            };
+            })
+            .catch(err => displayError('Could not connect to the server.'));
+    }
 
-            const symbolSelect = document.getElementById('symbol-select');
-            const stockSymbolInput = document.getElementById('stock-symbol');
-            const expiryDateSelect = document.getElementById('expiry-date');
-            let allInstruments = [];
+    function updateExpiryDates() {
+        const symbol = symbolSelect.value;
+        if (!symbol) return;
 
-            const populateInstruments = (instruments) => {
-                symbolSelect.innerHTML = '';
-                instruments.forEach(inst => {
-                    const option = document.createElement('option');
-                    option.value = inst.key;
-                    option.textContent = inst.name;
-                    symbolSelect.appendChild(option);
-                });
-            };
-
-            const filterInstruments = () => {
-                const filterText = stockSymbolInput.value.trim().toUpperCase();
-                if (!filterText) {
-                    populateInstruments(allInstruments);
-                    return;
+        fetch(`/api/expiry-dates?symbol=${encodeURIComponent(symbol)}`)
+            .then(response => response.json())
+            .then(data => {
+                expirySelect.innerHTML = '';
+                if (data.expiry_dates && data.expiry_dates.length > 0) {
+                    data.expiry_dates.forEach(date => {
+                        const option = new Option(date, date);
+                        expirySelect.add(option);
+                    });
+                    fetchData(); // Fetch data for the first expiry
                 }
-                const filtered = allInstruments.filter(inst => inst.name.toUpperCase().includes(filterText));
-                populateInstruments(filtered);
-            };
+            });
+    }
 
-            const updateExpiryDates = (symbol) => {
-                fetch(`/api/expiry-dates?symbol=${encodeURIComponent(symbol)}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        expiryDateSelect.innerHTML = ''; // Clear old options
-                        if (data.expiry_dates && data.expiry_dates.length > 0) {
-                            data.expiry_dates.forEach(date => {
-                                const option = document.createElement('option');
-                                option.value = date;
-                                option.textContent = date;
-                                expiryDateSelect.appendChild(option);
-                            });
-                            fetchData(); // Fetch data for the first expiry
-                        } else {
-                            callTableBody.innerHTML = '';
-                            putTableBody.innerHTML = '';
-                        }
-                    });
-            };
-
-            const fetchData = () => {
-                const symbol = symbolSelect.value;
-                const expiry = expiryDateSelect.value;
-
-                if (!symbol || !expiry) return;
-
-                const apiUrl = `/api/data?symbol=${encodeURIComponent(symbol)}&expiry=${expiry}`;
-
-                fetch(apiUrl)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.error) {
-                            errorContainer.innerHTML = `<p><strong>Error:</strong> ${data.error}</p>`;
-                            errorContainer.style.display = 'block';
-                            callTableBody.innerHTML = '';
-                            putTableBody.innerHTML = '';
-                        } else {
-                            errorContainer.style.display = 'none';
-                            updateTable(callTableBody, data.call_data);
-                            updateTable(putTableBody, data.put_data);
-                        }
-                    })
-                    .catch(error => {
-                        errorContainer.innerHTML = `<p><strong>Error:</strong> Could not connect to the server.</p>`;
-                        errorContainer.style.display = 'block';
-                    });
-            };
-
-            const handleSymbolChange = () => {
-                updateExpiryDates(symbolSelect.value);
-            };
-
-            // Event Listeners
-            symbolSelect.addEventListener('change', handleSymbolChange);
-            stockSymbolInput.addEventListener('input', filterInstruments); // Use 'input' for live filtering
-            expiryDateSelect.addEventListener('change', fetchData);
-
-            // Initial Load
-            fetch('/api/instruments')
-                .then(response => response.json())
-                .then(data => {
-                    allInstruments = data.instruments;
-                    populateInstruments(allInstruments);
-                    handleSymbolChange(); // Load expiries for the first instrument
+    // Initial Load
+    fetch('/api/instruments')
+        .then(response => response.json())
+        .then(data => {
+            if (data.instruments && data.instruments.length > 0) {
+                data.instruments.forEach(inst => {
+                    const option = new Option(inst.name, inst.key);
+                    symbolSelect.add(option);
                 });
-
-            setInterval(fetchData, 60000); // Refresh every 60 seconds
+                updateExpiryDates(); // Load expiries for the first instrument
+            }
         });
-    </script>
-</body>
-</html>
+
+    // Event Listeners
+    symbolSelect.addEventListener('change', updateExpiryDates);
+    expirySelect.addEventListener('change', fetchData);
+    setInterval(fetchData, 60000); // Auto-refresh every 60 seconds
+});
+</script>
+{% endblock %}

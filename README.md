@@ -1,23 +1,36 @@
-# Upstox OI Tracker Web Application
+# Professional OI Tracker - A Database-Driven Web Application
 
-This application provides a powerful, dynamic, and live web-based interface to track Open Interest (OI) changes for options contracts using the Upstox API.
+This is a professional-grade, database-driven web application designed to track and analyze Open Interest (OI) changes for Futures and Options (F&O) contracts using the Upstox API. The architecture is designed for performance, reliability, and scalability.
+
+## Key Architectural Features
+
+- **Database-Centric Design:** The application is built around a local SQLite database that stores all instrument data, historical OI data points, and calculated results. This makes the application incredibly fast and reliable.
+- **Structured Flask Application:** The project follows a professional Flask application structure, separating concerns into distinct modules for the web layer (`app.py`), database interactions (`database.py`), and core business logic (`logic.py`).
+- **On-Demand Data Processing:** The application uses a robust model where the frontend requests data, and the backend fetches, calculates, and stores the results in real-time, ensuring the data is always fresh.
+- **Dynamic User Interface:** The UI is fully dynamic, populating instrument lists and expiry dates directly from the local database and providing a live, auto-refreshing view of the market data.
 
 ## Features
 
-- **Dynamic Instrument Selection:** The application automatically fetches and displays a comprehensive list of all tradable instruments (indices and stocks) that have derivatives. A live search filter makes it easy to find any instrument.
-- **Dynamic Expiry Date Selection:** The expiry date dropdown is dynamically populated with all valid expiry dates for the selected instrument.
-- **Live OI Dashboard:** The dashboard auto-refreshes every 60 seconds, providing a real-time view of the market.
-- **Expanded Data View:** Tracks 7 strikes (ATM ± 3) and calculates OI changes over 5 different time intervals (3, 5, 10, 15, and 30 minutes).
-- **Flexible Login:** Supports two login methods:
-    1.  **Standard OAuth2 Flow:** Enter your API Key and Secret to go through the secure login process.
-    2.  **Direct Access Token:** If you already have a valid access token, you can paste it in to go directly to the dashboard.
-- **Color-Coded Tables:** Separate tables for Call and Put options, with color-coding to highlight significant OI changes.
+- **Dynamic Instrument & Expiry Selection:** Automatically populates a full list of tradable F&O instruments and their valid future expiry dates from the local database.
+- **Live OI Dashboard:** The dashboard auto-refreshes every 60 seconds.
+- **Expanded Data View:** Tracks 7 strikes (ATM ± 3) and calculates OI changes over 5 different time intervals (3m, 5m, 10m, 15m, 30m).
+- **Flexible Login:** Supports both standard OAuth2 login and direct access token login.
 
-## Prerequisites
+## Project Structure
 
-- Python 3.7+
-- An active Upstox account.
-- An app created on the [Upstox Developer Console](https://upstox.com/developer/apps) to get your API Key and API Secret.
+```
+/
+├── app.py                  # Main Flask application file (routes and server)
+├── database.py             # Handles all database setup and queries
+├── download_contracts.py   # Script to download and populate the instrument database
+├── logic.py                # Core business logic for fetching and calculations
+├── requirements.txt        # Python dependencies
+├── tracker.db              # The SQLite database file (created on setup)
+└── templates/
+    ├── base.html           # Base HTML template for all pages
+    ├── index.html          # The login page
+    └── dashboard.html      # The main OI tracker dashboard
+```
 
 ## Setup and Installation
 
@@ -29,55 +42,48 @@ This is the most important setup step. For the login process to work, you must c
 - Set the Redirect URI to: `http://127.0.0.1:5000/callback`
 - Make sure to save the changes.
 
-*(Note: If you are running this in a cloud environment like GitHub Codespaces, you must use the publicly forwarded URL provided by that environment instead of `127.0.0.1:5000`)*
-
-### 2. Clone the Repository
-
-Clone this repository to your local machine.
-
-### 3. Set up a Virtual Environment
-
-It is highly recommended to use a virtual environment to manage the project's dependencies.
+### 2. Clone the Repository & Set Up Environment
 
 ```bash
-# Navigate to the project directory
-cd path/to/your/project
+# Clone this repository
+git clone <your-repo-url>
+cd <your-repo-directory>
 
-# Create a virtual environment
+# Create and activate a virtual environment
 python3 -m venv venv
-
-# Activate the virtual environment
-# On macOS and Linux:
 source venv/bin/activate
-# On Windows:
-# venv\\Scripts\\activate
 ```
 
-### 4. Install Dependencies
-
-Install the required Python libraries using the `requirements.txt` file.
+### 3. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
+### 4. Set Up the Local Database (One-Time Setup)
+
+This is a one-time process to initialize your local data store.
+
+**a. Create the Database File:**
+Run the `database.py` script directly. This will create the `tracker.db` file and all the necessary tables.
+```bash
+python database.py
+```
+
+**b. Download Contracts and Populate the Database:**
+Run the `download_contracts.py` script. This will download the latest list of all F&O instruments from Upstox and save them to your local database.
+```bash
+python download_contracts.py
+```
+*(Note: It is recommended to run this script periodically, e.g., once a day, to keep your instrument list up-to-date.)*
+
 ## How to Run the Application
 
-1.  **Activate your virtual environment** if you haven't already.
+1.  **Activate your virtual environment.**
 2.  **Run the Flask web server:**
 
     ```bash
     python app.py
     ```
-3.  **Open your web browser** and navigate to:
-
-    `http://127.0.0.1:5000`
-
-4.  You will see the login page with two options. Use either your API credentials or a direct access token to log in.
-5.  If using credentials, you will be redirected to the Upstox website to log in and grant access.
-6.  After a successful login, you will be redirected to the application's powerful, live dashboard. Enjoy!
-
-## Important Notes
-
-- **Instrument List:** The application attempts to download a full list of tradable instruments from Upstox's servers. In some environments (like corporate networks or certain cloud platforms), this download may be blocked, resulting in a "403 Forbidden" error in the server logs. In this case, the application will gracefully fall back to a default list of major indices (Nifty, BankNifty, Sensex).
-- **Session Management:** The application uses a Flask session to securely store your `access_token` for the duration of your session. Closing your browser tab may end the session.
+3.  **Open your web browser** and navigate to: `http://127.0.0.1:5000`
+4.  Use one of the two login methods to access the dashboard. Enjoy your fast, reliable, and powerful new OI Tracker!
