@@ -29,10 +29,9 @@ def callback():
     code = request.args.get('code')
     api_key = session.get('api_key')
     api_secret = session.get('api_secret')
-    # The redirect URI must match exactly what is configured in the Upstox App
-    redirect_uri = url_for('callback', _external=True)
+    redirect_uri = session.get('redirect_uri') # Use the URI from the session
 
-    if not all([code, api_key, api_secret]):
+    if not all([code, api_key, api_secret, redirect_uri]):
         return "Error: Missing required session data or callback code.", 400
 
     try:
@@ -57,8 +56,9 @@ def login():
     """Handles the API credentials login flow by redirecting to Upstox."""
     session['api_key'] = request.form.get('api_key')
     session['api_secret'] = request.form.get('api_secret')
+    session['redirect_uri'] = request.form.get('redirect_uri') # Store the user-provided URI
 
-    redirect_uri = url_for('callback', _external=True)
+    redirect_uri = session['redirect_uri']
 
     api_instance = upstox_client.LoginApi()
     response = api_instance.authorize(session['api_key'], redirect_uri, "v2")
@@ -76,20 +76,6 @@ def logout():
     """Logs the user out."""
     session.clear()
     return redirect(url_for('index'))
-
-# --- Debugging Route ---
-
-@app.route('/debug')
-def debug():
-    """A debugging page to show session values."""
-    api_key = session.get('api_key', 'Not Set')
-    # Generate the redirect_uri to show exactly what Flask is creating
-    try:
-        redirect_uri = url_for('callback', _external=True)
-    except Exception as e:
-        redirect_uri = f"Error generating URL: {e}"
-
-    return render_template('debug.html', api_key=api_key, redirect_uri=redirect_uri)
 
 # --- API Endpoints ---
 
