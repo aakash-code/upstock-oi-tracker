@@ -77,6 +77,20 @@ def logout():
     session.clear()
     return redirect(url_for('index'))
 
+# --- Debugging Route ---
+
+@app.route('/debug')
+def debug():
+    """A debugging page to show session values."""
+    api_key = session.get('api_key', 'Not Set')
+    # Generate the redirect_uri to show exactly what Flask is creating
+    try:
+        redirect_uri = url_for('callback', _external=True)
+    except Exception as e:
+        redirect_uri = f"Error generating URL: {e}"
+
+    return render_template('debug.html', api_key=api_key, redirect_uri=redirect_uri)
+
 # --- API Endpoints ---
 
 @app.route('/api/instruments')

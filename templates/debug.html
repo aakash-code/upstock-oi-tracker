@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Debug Info - OI Tracker{% endblock %}
+
+{% block head %}
+<style>
+    .debug-container { max-width: 800px; margin: auto; }
+    h1 { margin-bottom: 2rem; }
+    .info-box {
+        background-color: #f7f7f7;
+        border: 1px solid #ddd;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        word-wrap: break-word; /* Ensure long strings don't overflow */
+    }
+    .info-box h2 {
+        margin-top: 0;
+        font-size: 1.2rem;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .info-box p {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 1.1rem;
+        background: #e9e9e9;
+        padding: 0.5rem;
+        border-radius: 4px;
+    }
+    .instructions {
+        margin-top: 2rem;
+        line-height: 1.6;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="debug-container">
+    <h1>Application Debug Information</h1>
+
+    <div class="info-box">
+        <h2>API Key (client_id) Sent to Upstox:</h2>
+        <p>{{ api_key }}</p>
+    </div>
+
+    <div class="info-box">
+        <h2>Redirect URI Sent to Upstox:</h2>
+        <p>{{ redirect_uri }}</p>
+    </div>
+
+    <div class="instructions">
+        <h3>How to Use This Page:</h3>
+        <ol>
+            <li>Go to your app settings on the <strong>Upstox Developer Console</strong>.</li>
+            <li>Carefully compare the values above with the values in your settings.</li>
+            <li>The <strong>API Key</strong> must match exactly.</li>
+            <li>The <strong>Redirect URI</strong> must match exactly. Use copy and paste to be sure.</li>
+            <li>If you find a mismatch, update your settings on the Upstox website to match the values shown here.</li>
+        </ol>
+    </div>
+</div>
+{% endblock %}
