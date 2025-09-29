@@ -147,13 +147,13 @@ def get_historical_oi(instrument_key):
     try:
         history_api = upstox_client.HistoryApi(api_client)
         to_date = datetime.now().date()
-        from_date = to_date - timedelta(days=2)
+        # The history API calculates the from_date based on the to_date and the interval.
+        # The `from_date` parameter is not supported in the v2 version of this call.
 
         response = history_api.get_historical_candle_data(
             instrument_key=instrument_key,
             interval=DATA_INTERVAL,
             to_date=to_date.strftime('%Y-%m-%d'),
-            from_date=from_date.strftime('%Y-%m-%d'),
             api_version="v2"
         )
         return response.data.candles
@@ -246,7 +246,7 @@ def update_data_in_background():
                     if abs(call_result.get("chg_15m", 0)) > 15: highlighted_cells += 1
                     if abs(call_result.get("chg_30m", 0)) > 25: highlighted_cells += 1
 
-                put_result = process_single_option(strike_data.put_options, strike_data.strike_strike_price)
+                put_result = process_single_option(strike_data.put_options, strike_data.strike_price)
                 if put_result:
                     processed_data["puts"].append(put_result)
                     if abs(put_result.get("chg_10m", 0)) > 10: highlighted_cells += 1
