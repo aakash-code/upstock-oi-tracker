@@ -66,12 +66,9 @@ def initialize_api_client():
         return False
 
 def get_nearest_weekly_expiry():
-    """
-    Fetches all available option contracts to determine the nearest weekly expiry date automatically.
-    """
+    """Fetches all available option contracts to determine the nearest weekly expiry date automatically."""
     try:
         options_api = upstox_client.OptionsApi(api_client)
-        # Get all option contracts for the underlying instrument to find expiry dates
         response = options_api.get_option_contracts(instrument_key=UNDERLYING_INSTRUMENT)
 
         if not response.data:
@@ -92,7 +89,6 @@ def get_nearest_weekly_expiry():
             logging.error("No future expiry dates found from option contracts.")
             return None
 
-        # Sort the dates and return the nearest one in the required 'YYYY-MM-DD' format
         nearest_expiry_date = sorted(list(future_expiries))[0]
         logging.info(f"Automatically selected nearest weekly expiry: {nearest_expiry_date}")
         return nearest_expiry_date.strftime('%Y-%m-%d')
@@ -149,6 +145,25 @@ def calculate_oi_change(candles, latest_oi):
             oi_changes[f"chg_{minutes}m"] = 0
     return oi_changes
 
+def process_option_contract(contract_data, strike_price):
+    """Helper to process a single call or put contract."""
+    if not contract_data or not contract_data.instrument_key:
+        return None
+
+    instrument_key = contract_data.instrument_key
+    logging.info(f"Processing: {instrument_key}")
+
+    to_date = datetime.now()
+    from_date = to_date - timedelta(days=2)
+
+    candles = get_historical_oi(instrument_key, to_date, from_date)
+
+    if candles:
+        latest_oi = candles[-1][6]
+        changes = calculate_oi_change(candles, latest_oi)
+        return {"strike": strike_price, **changes}
+    return None
+
 def update_oi_data():
     """The core logic to fetch, process, and cache the OI data."""
     if not api_client:
@@ -165,7 +180,6 @@ def update_oi_data():
         ltp = ltp_data.last_price
         if not ltp:
             app_state.update({"status": "Error", "message": "Could not fetch NIFTY LTP."})
-            logging.error(app_state["message"])
             return
         atm_strike = round(ltp / STRIKE_DIFFERENCE) * STRIKE_DIFFERENCE
         logging.info(f"NIFTY LTP: {ltp}, ATM Strike: {atm_strike}")
@@ -174,7 +188,6 @@ def update_oi_data():
         nearest_expiry = get_nearest_weekly_expiry()
         if not nearest_expiry:
             app_state.update({"status": "Error", "message": "Could not automatically determine the nearest expiry date."})
-            logging.error(app_state["message"])
             return
 
         # 3. Get Option Chain for that expiry
@@ -183,39 +196,34 @@ def update_oi_data():
             app_state.update({"status": "Error", "message": f"Could not fetch option chain for expiry {nearest_expiry}."})
             return
 
-        # 4. Find relevant strikes and their instrument keys
+        # 4. Find relevant strikes and process them
         strikes_to_fetch = [atm_strike + (i * STRIKE_DIFFERENCE) for i in range(-NUM_STRIKES, NUM_STRIKES + 1)]
 
         processed_data = {"calls": [], "puts": [], "alert": False}
         highlighted_cells = 0
         total_cells = len(strikes_to_fetch) * len(OI_INTERVALS_MIN) * 2
 
-        to_date = datetime.now()
-        from_date = to_date - timedelta(days=2)
+        for strike_data in option_chain:
+            if strike_data.strike_price in strikes_to_fetch:
 
-        for contract in option_chain:
-            if contract.strike_price in strikes_to_fetch:
-                instrument_key = contract.instrument_key
-                option_type = contract.option_type
-                strike_price = contract.strike_price
+                # Process Call Option
+                call_result = process_option_contract(strike_data.call_options, strike_data.strike_price)
+                if call_result:
+                    processed_data["calls"].append(call_result)
+                    if abs(call_result.get("chg_10m", 0)) > 10: highlighted_cells += 1
+                    if abs(call_result.get("chg_15m", 0)) > 15: highlighted_cells += 1
+                    if abs(call_result.get("chg_30m", 0)) > 25: highlighted_cells += 1
 
-                logging.info(f"Processing: {instrument_key}")
-                candles = get_historical_oi(instrument_key, to_date, from_date)
-
-                if candles:
-                    latest_oi = candles[-1][6]
-                    changes = calculate_oi_change(candles, latest_oi)
-
-                    table = "calls" if option_type == "CE" else "puts"
-                    processed_data[table].append({"strike": strike_price, **changes})
-
-                    if abs(changes.get("chg_10m", 0)) > 10: highlighted_cells += 1
-                    if abs(changes.get("chg_15m", 0)) > 15: highlighted_cells += 1
-                    if abs(changes.get("chg_30m", 0)) > 25: highlighted_cells += 1
+                # Process Put Option
+                put_result = process_option_contract(strike_data.put_options, strike_data.strike_price)
+                if put_result:
+                    processed_data["puts"].append(put_result)
+                    if abs(put_result.get("chg_10m", 0)) > 10: highlighted_cells += 1
+                    if abs(put_result.get("chg_15m", 0)) > 15: highlighted_cells += 1
+                    if abs(put_result.get("chg_30m", 0)) > 25: highlighted_cells += 1
 
         if not processed_data["calls"] and not processed_data["puts"]:
-            app_state.update({"status": "Warning", "message": "Data fetched, but no matching option contracts were found in the chain."})
-            logging.warning(app_state["message"])
+            app_state.update({"status": "Warning", "message": "Data fetched, but no matching option contracts were found in the chain for the required strikes."})
         else:
             if total_cells > 0 and (highlighted_cells / total_cells) > 0.5:
                 processed_data["alert"] = True
