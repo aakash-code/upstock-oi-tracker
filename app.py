@@ -2,7 +2,7 @@ import os
 import time
 import logging
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from flask import Flask, render_template, jsonify
 import upstox_client
@@ -166,12 +166,15 @@ def calculate_oi_change(candles, latest_oi):
     Calculates the percentage change in Open Interest over predefined intervals.
     """
     oi_changes = {}
-    now = datetime.now()
+    # Use timezone-aware datetime objects for correct comparisons
+    now = datetime.now(timezone.utc)
     for minutes in OI_INTERVALS_MIN:
         target_time = now - timedelta(minutes=minutes)
         past_oi = None
         for candle in reversed(candles):
-            candle_time = datetime.fromtimestamp(int(candle[0]) / 1000)
+            # FIX: The timestamp from the API is an ISO 8601 string, not a Unix timestamp.
+            # It must be parsed correctly.
+            candle_time = datetime.fromisoformat(candle[0])
             if candle_time <= target_time:
                 past_oi = candle[6]
                 break
