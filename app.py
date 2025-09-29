@@ -65,16 +65,49 @@ def initialize_api_client():
         api_client = None
         return False
 
+def get_nearest_weekly_expiry():
+    """
+    Fetches all available option contracts to determine the nearest weekly expiry date automatically.
+    """
+    try:
+        options_api = upstox_client.OptionsApi(api_client)
+        # Get all option contracts for the underlying instrument to find expiry dates
+        response = options_api.get_option_contracts(instrument_key=UNDERLYING_INSTRUMENT)
+
+        if not response.data:
+            logging.error("Could not fetch option contracts to determine expiry dates.")
+            return None
+
+        today = datetime.now().date()
+        future_expiries = set()
+
+        for contract in response.data:
+            # expiry_date is a string in 'YYYY-MM-DD' format
+            expiry_dt = datetime.strptime(contract.expiry_date, '%Y-%m-%d').date()
+            if expiry_dt >= today:
+                future_expiries.add(expiry_dt)
+
+        if not future_expiries:
+            logging.error("No future expiry dates found from option contracts.")
+            return None
+
+        # Sort the dates and return the nearest one in the required 'YYYY-MM-DD' format
+        nearest_expiry_date = sorted(list(future_expiries))[0]
+        logging.info(f"Automatically selected nearest weekly expiry: {nearest_expiry_date}")
+        return nearest_expiry_date.strftime('%Y-%m-%d')
+
+    except Exception as e:
+        logging.error(f"Error determining nearest weekly expiry: {e}", exc_info=True)
+        return None
+
 def get_option_chain(expiry_date):
     """Fetches the option chain for a specific expiry date."""
     try:
-        # CORRECTED: Use the correct `OptionsApi` class and `get_put_call_option_chain` method
         options_api = upstox_client.OptionsApi(api_client)
         response = options_api.get_put_call_option_chain(
             instrument_key=UNDERLYING_INSTRUMENT,
             expiry_date=expiry_date
         )
-        # The data from the option chain is a list of contracts.
         return response.data
     except Exception as e:
         logging.error(f"Error fetching option chain for expiry {expiry_date}: {e}", exc_info=True)
@@ -126,10 +159,7 @@ def update_oi_data():
     try:
         # 1. Get ATM Strike
         quote_api = upstox_client.MarketQuoteApi(api_client)
-        # CORRECTED METHOD: The original `get_market_quote` was incorrect. The correct method is `ltp`.
         api_response = quote_api.ltp(UNDERLYING_INSTRUMENT, "v2")
-        # FINAL FIX: The response is a dictionary keyed by the instrument. Instead of guessing the key,
-        # we will access the first value in the dictionary, which is the data object we need.
         ltp_data = list(api_response.data.values())[0]
         ltp = ltp_data.last_price
         if not ltp:
@@ -139,11 +169,12 @@ def update_oi_data():
         atm_strike = round(ltp / STRIKE_DIFFERENCE) * STRIKE_DIFFERENCE
         logging.info(f"NIFTY LTP: {ltp}, ATM Strike: {atm_strike}")
 
-        # 2. Get nearest weekly expiry from option contracts
-        today = date.today()
-        # Simplified expiry logic: assume nearest Thursday
-        days_to_thursday = (3 - today.weekday() + 7) % 7
-        nearest_expiry = (today + timedelta(days=days_to_thursday)).strftime('%Y-%m-%d')
+        # 2. Get nearest weekly expiry automatically
+        nearest_expiry = get_nearest_weekly_expiry()
+        if not nearest_expiry:
+            app_state.update({"status": "Error", "message": "Could not automatically determine the nearest expiry date."})
+            logging.error(app_state["message"])
+            return
 
         # 3. Get Option Chain for that expiry
         option_chain = get_option_chain(nearest_expiry)
