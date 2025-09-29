@@ -1,4 +1,0 @@
-[2025-09-29 04:43:29 +0000] [2823] [INFO] Starting gunicorn 23.0.0
-[2025-09-29 04:43:29 +0000] [2823] [INFO] Listening at: http://127.0.0.1:8000 (2823)
-[2025-09-29 04:43:29 +0000] [2823] [INFO] Using worker: sync
-[2025-09-29 04:43:29 +0000] [2825] [INFO] Booting worker with pid: 2825

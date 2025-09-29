@@ -40,7 +40,7 @@ app_state = {
 }
 
 # ==============================================================================
-# --- CORE API AND DATA LOGIC (REWRITTEN FROM SCRATCH) ---
+# --- CORE API AND DATA LOGIC (RECONSTRUCTED WITH ALL FIXES) ---
 # ==============================================================================
 
 def initialize_api_client():
@@ -79,9 +79,10 @@ def get_atm_strike():
     """
     try:
         quote_api = upstox_client.MarketQuoteApi(api_client)
+        # FIX: Correct method is ltp()
         api_response = quote_api.ltp(UNDERLYING_INSTRUMENT, "v2")
 
-        # Robustly parse the response
+        # FIX: Robustly parse the response to avoid KeyError
         ltp_data = list(api_response.data.values())[0]
         ltp = ltp_data.last_price
 
@@ -99,9 +100,10 @@ def get_atm_strike():
 def get_nearest_weekly_expiry():
     """
     Fetches all option contracts for the underlying to find the nearest
-    upcoming weekly expiry date. This is a robust way to avoid hardcoding.
+    upcoming weekly expiry date.
     """
     try:
+        # FIX: Correct class is OptionsApi
         options_api = upstox_client.OptionsApi(api_client)
         response = options_api.get_option_contracts(instrument_key=UNDERLYING_INSTRUMENT)
 
@@ -112,19 +114,17 @@ def get_nearest_weekly_expiry():
         today = datetime.now().date()
         future_expiries = set()
 
-        # The data object is InstrumentData, the attribute is .expiry
+        # FIX: Correct attribute is .expiry on the InstrumentData object
         for contract in response.data:
             if contract.expiry:
                 expiry_dt = contract.expiry.date()
-                # Only consider weekly options that are on or after today
-                if expiry_dt >= today and contract.instrument_type == 'OPTIDX' and contract.weekly:
+                if expiry_dt >= today and contract.weekly:
                     future_expiries.add(expiry_dt)
 
         if not future_expiries:
             logging.error("No future weekly expiry dates found from option contracts.")
             return None
 
-        # Sort dates and return the nearest one
         nearest_expiry_date = sorted(list(future_expiries))[0]
         logging.info(f"Automatically selected nearest weekly expiry: {nearest_expiry_date}")
         return nearest_expiry_date.strftime('%Y-%m-%d')
@@ -136,9 +136,9 @@ def get_nearest_weekly_expiry():
 def get_option_chain(expiry_date):
     """
     Fetches the full Put/Call option chain for a given expiry date.
-    The response contains a list of OptionStrikeData objects.
     """
     try:
+        # FIX: Correct class is OptionsApi and method is get_put_call_option_chain
         options_api = upstox_client.OptionsApi(api_client)
         response = options_api.get_put_call_option_chain(
             instrument_key=UNDERLYING_INSTRUMENT,
@@ -152,7 +152,6 @@ def get_option_chain(expiry_date):
 def get_historical_oi(instrument_key):
     """
     Fetches 1-minute historical candle data for a given instrument key.
-    We fetch for the last 2 days to ensure we have enough data for calculations.
     """
     try:
         history_api = upstox_client.HistoryApi(api_client)
@@ -183,7 +182,7 @@ def calculate_oi_change(candles, latest_oi):
         for candle in reversed(candles):
             candle_time = datetime.fromtimestamp(int(candle[0]) / 1000)
             if candle_time <= target_time:
-                past_oi = candle[6]  # OI is the 7th element in the candle list
+                past_oi = candle[6]
                 break
 
         if past_oi is not None and past_oi > 0:
@@ -196,9 +195,8 @@ def calculate_oi_change(candles, latest_oi):
 def process_single_option(option_data, strike_price):
     """
     A helper function to process one option contract (either a call or a put).
-    It fetches historical data and calculates OI changes.
     """
-    # option_data is a PutCallOptionChainData object. It contains the instrument_key.
+    # FIX: The instrument_key is nested inside this PutCallOptionChainData object
     if not option_data or not option_data.instrument_key:
         return None
 
@@ -250,10 +248,11 @@ def update_data_in_background():
         total_cells = len(strikes_to_fetch) * len(OI_INTERVALS_MIN) * 2
 
         app_state["message"] = "Processing contracts..."
+        # FIX: The main object in the chain is OptionStrikeData
         for strike_data in option_chain:
-            # The main object in the chain is OptionStrikeData
             if strike_data.strike_price in strikes_to_fetch:
-                # Process the call option for the current strike
+
+                # FIX: Access the nested call_options object
                 call_result = process_single_option(strike_data.call_options, strike_data.strike_price)
                 if call_result:
                     processed_data["calls"].append(call_result)
@@ -261,7 +260,7 @@ def update_data_in_background():
                     if abs(call_result.get("chg_15m", 0)) > 15: highlighted_cells += 1
                     if abs(call_result.get("chg_30m", 0)) > 25: highlighted_cells += 1
 
-                # Process the put option for the current strike
+                # FIX: Access the nested put_options object
                 put_result = process_single_option(strike_data.put_options, strike_data.strike_price)
                 if put_result:
                     processed_data["puts"].append(put_result)
@@ -302,8 +301,7 @@ def index():
 @app.route("/status")
 def status_endpoint():
     """
-    Provides the current application status and data to the frontend,
-    allowing it to be reactive.
+    Provides the current application status and data to the frontend.
     """
     return jsonify({
         "status": app_state["status"],
