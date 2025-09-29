@@ -82,10 +82,11 @@ def get_nearest_weekly_expiry():
         future_expiries = set()
 
         for contract in response.data:
-            # expiry_date is a string in 'YYYY-MM-DD' format
-            expiry_dt = datetime.strptime(contract.expiry_date, '%Y-%m-%d').date()
-            if expiry_dt >= today:
-                future_expiries.add(expiry_dt)
+            # CORRECTED: The attribute is `expiry` and it's a datetime object.
+            if contract.expiry:
+                expiry_dt = contract.expiry.date()
+                if expiry_dt >= today:
+                    future_expiries.add(expiry_dt)
 
         if not future_expiries:
             logging.error("No future expiry dates found from option contracts.")
