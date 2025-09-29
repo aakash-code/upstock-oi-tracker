@@ -1,0 +1,4 @@
+Flask
+upstox-python-sdk
+python-dotenv
+gunicorn
