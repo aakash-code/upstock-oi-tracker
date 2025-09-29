@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live OI Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white">
+    <div class="container mx-auto p-4">
+        <h1 class="text-3xl font-bold text-center mb-2">Live OI Tracker Dashboard</h1>
+        <div id="status-banner" class="text-center mb-4 p-2 rounded-lg"></div>
+
+        <div id="tables-container" class="grid grid-cols-1 md:grid-cols-2 gap-8 hidden">
+            <!-- Call Options Table -->
+            <div>
+                <h2 class="text-2xl font-semibold mb-4 text-center">Call Options</h2>
+                <table id="calls-table" class="w-full text-sm text-left text-gray-400">
+                    <thead class="text-xs text-gray-300 uppercase bg-gray-700">
+                        <tr>
+                            <th scope="col" class="px-6 py-3">Strike</th>
+                            <th scope="col" class="px-6 py-3">OI Chg (3m)</th>
+                            <th scope="col" class="px-6 py-3">OI Chg (5m)</th>
+                            <th scope="col" class="px-6 py-3">OI Chg (10m)</th>
+                            <th scope="col" class="px-6 py-3">OI Chg (15m)</th>
+                            <th scope="col" class="px-6 py-3">OI Chg (30m)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Rows will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <!-- Put Options Table -->
+            <div>
+                <h2 class="text-2xl font-semibold mb-4 text-center">Put Options</h2>
+                <table id="puts-table" class="w-full text-sm text-left text-gray-400">
+                    <thead class="text-xs text-gray-300 uppercase bg-gray-700">
+                        <tr>
+                            <th scope="col" class="px-6 py-3">Strike</th>
+                            <th scope="col" class="px-6 py-3">OI Chg (3m)</th>
+                            <th scope="col" class="px-6 py-3">OI Chg (5m)</th>
+                            <th scope="col" class="px-6 py-3">OI Chg (10m)</th>
+                            <th scope="col" class="px-6 py-3">OI Chg (15m)</th>
+                            <th scope="col" class="px-6 py-3">OI Chg (30m)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Rows will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <audio id="alert-sound" src="https://www.soundjay.com/buttons/sounds/button-7.mp3" preload="auto"></audio>
+
+    <script>
+        const callsTableBody = document.querySelector('#calls-table tbody');
+        const putsTableBody = document.querySelector('#puts-table tbody');
+        const alertSound = document.getElementById('alert-sound');
+        const statusBanner = document.getElementById('status-banner');
+        const tablesContainer = document.getElementById('tables-container');
+
+        const THRESHOLDS = {
+            'chg_3m': 5,
+            'chg_5m': 8,
+            'chg_10m': 10,
+            'chg_15m': 15,
+            'chg_30m': 25
+        };
+
+        function getCellClass(value, key) {
+            if (Math.abs(value) > THRESHOLDS[key]) {
+                return 'class="px-6 py-4 bg-red-700 text-white font-bold"';
+            }
+            return 'class="px-6 py-4"';
+        }
+
+        function updateTables(data) {
+            if (!data || !data.calls || !data.puts) {
+                return;
+            }
+
+            callsTableBody.innerHTML = '';
+            putsTableBody.innerHTML = '';
+
+            data.calls.forEach(d => {
+                const row = `
+                    <tr class="bg-gray-800 border-b border-gray-700">
+                        <td class="px-6 py-4 font-medium whitespace-nowrap">${d.strike}</td>
+                        <td ${getCellClass(d.chg_3m, 'chg_3m')}>${d.chg_3m || 'N/A'}%</td>
+                        <td ${getCellClass(d.chg_5m, 'chg_5m')}>${d.chg_5m || 'N/A'}%</td>
+                        <td ${getCellClass(d.chg_10m, 'chg_10m')}>${d.chg_10m || 'N/A'}%</td>
+                        <td ${getCellClass(d.chg_15m, 'chg_15m')}>${d.chg_15m || 'N/A'}%</td>
+                        <td ${getCellClass(d.chg_30m, 'chg_30m')}>${d.chg_30m || 'N/A'}%</td>
+                    </tr>
+                `;
+                callsTableBody.innerHTML += row;
+            });
+
+            data.puts.forEach(d => {
+                const row = `
+                    <tr class="bg-gray-800 border-b border-gray-700">
+                        <td class="px-6 py-4 font-medium whitespace-nowrap">${d.strike}</td>
+                        <td ${getCellClass(d.chg_3m, 'chg_3m')}>${d.chg_3m || 'N/A'}%</td>
+                        <td ${getCellClass(d.chg_5m, 'chg_5m')}>${d.chg_5m || 'N/A'}%</td>
+                        <td ${getCellClass(d.chg_10m, 'chg_10m')}>${d.chg_10m || 'N/A'}%</td>
+                        <td ${getCellClass(d.chg_15m, 'chg_15m')}>${d.chg_15m || 'N/A'}%</td>
+                        <td ${getCellClass(d.chg_30m, 'chg_30m')}>${d.chg_30m || 'N/A'}%</td>
+                    </tr>
+                `;
+                putsTableBody.innerHTML += row;
+            });
+        }
+
+        function updateStatus(status, message, lastUpdated) {
+            let statusText = `Status: ${status} | ${message}`;
+            if (lastUpdated) {
+                statusText += ` (Last updated: ${lastUpdated})`;
+            }
+            statusBanner.textContent = statusText;
+
+            if (status === 'OK') {
+                statusBanner.className = 'text-center mb-4 p-2 rounded-lg bg-green-800 text-green-200';
+                tablesContainer.classList.remove('hidden');
+            } else if (status === 'Error') {
+                statusBanner.className = 'text-center mb-4 p-2 rounded-lg bg-red-800 text-red-200';
+                tablesContainer.classList.add('hidden');
+            } else {
+                statusBanner.className = 'text-center mb-4 p-2 rounded-lg bg-yellow-800 text-yellow-200';
+                tablesContainer.classList.add('hidden');
+            }
+        }
+
+        async function fetchData() {
+            try {
+                const response = await fetch('/status');
+                if (!response.ok) {
+                    updateStatus('Error', `Failed to fetch status: ${response.statusText}`, null);
+                    return;
+                }
+                const result = await response.json();
+
+                updateStatus(result.status, result.message, result.last_updated);
+
+                if (result.status === 'OK' && result.data) {
+                    updateTables(result.data);
+                    if (result.data.alert) {
+                        alertSound.play().catch(e => console.error("Error playing sound:", e));
+                    }
+                }
+
+            } catch (error) {
+                console.error('An error occurred while fetching data:', error);
+                updateStatus('Error', 'An error occurred while fetching data. Check browser console for details.', null);
+            }
+        }
+
+        // Fetch data immediately on page load, then every 10 seconds for faster feedback
+        fetchData();
+        setInterval(fetchData, 10000);
+    </script>
+</body>
+</html>

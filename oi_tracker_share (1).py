@@ -56,7 +56,7 @@ EXCHANGE_LTP = KiteConnect.EXCHANGE_NSE      # Exchange for fetching LTP of the 
 ## Use KiteConnect attributes for exchange names
 #EXCHANGE_NFO_OPTIONS = KiteConnect.EXCHANGE_BFO  # Exchange for NFO options contracts
 #EXCHANGE_LTP = KiteConnect.EXCHANGE_BSE      # Exchange for fetching LTP of the underlying (e.g., NSE for NIFTY 50)
- 
+
 
 
 # --- Data Fetching Parameters ---
@@ -130,7 +130,7 @@ def get_atm_strike(kite_obj: KiteConnect, underlying_sym: str, exch_for_ltp: str
         if not ltp_data or ltp_instrument not in ltp_data or 'last_price' not in ltp_data[ltp_instrument]:
             logging.error(f"LTP data not found or incomplete for {ltp_instrument}. Response: {ltp_data}")
             return None
-        
+
         ltp = ltp_data[ltp_instrument]['last_price']
         # Calculate ATM strike by rounding LTP to the nearest strike difference
         atm_strike = round(ltp / strike_diff) * strike_diff
@@ -157,7 +157,7 @@ def get_nearest_weekly_expiry(instruments: list, underlying_prefix_str: str):
 
     #print(instruments)
     #print(underlying_prefix_str)
-    trading_symbol = {} 
+    trading_symbol = {}
 
     for inst in instruments:
         # Filter for options of the specified underlying
@@ -167,7 +167,7 @@ def get_nearest_weekly_expiry(instruments: list, underlying_prefix_str: str):
                 possible_expiries.add(inst['expiry'])
                 trading_symbol[inst['expiry']] = inst['tradingsymbol']
 
-    #print(possible_expiries) 
+    #print(possible_expiries)
     if not possible_expiries:
         logging.error(f"No future expiries found for {underlying_prefix_str}.")
         return None
@@ -181,7 +181,7 @@ def get_nearest_weekly_expiry(instruments: list, underlying_prefix_str: str):
     logging.info(f"Nearest weekly expiry for {underlying_prefix_str}: {nearest_expiry}")
     return {"expiry":nearest_expiry, "symbol_prefix":symbol_prefix}
 
-def get_relevant_option_details(instruments: list, atm_strike_val: float, expiry_dt: date, 
+def get_relevant_option_details(instruments: list, atm_strike_val: float, expiry_dt: date,
                                 strike_diff_val: int, opt_count: int, underlying_prefix_str: str, symbol_prefix: str):
     """
     Identifies relevant ITM, ATM, and OTM Call/Put option contract details (tradingsymbol, instrument_token, strike)
@@ -207,65 +207,65 @@ def get_relevant_option_details(instruments: list, atm_strike_val: float, expiry
 
     # Format expiry date for Zerodha's trading symbol convention (e.g., NIFTY23OCT19500CE)
     # Year: last two digits. Month: 3-letter uppercase. Day: two digits.
-    expiry_str_part = expiry_dt.strftime("%y%b%d").upper() 
+    expiry_str_part = expiry_dt.strftime("%y%b%d").upper()
     logging.debug(f"Searching for options with expiry: {expiry_dt}, ATM strike: {atm_strike_val}")
 
     # Iterate from -opt_count (deep ITM for calls / deep OTM for puts) to +opt_count
     for i in range(-opt_count, opt_count + 1):
         current_strike = atm_strike_val + (i * strike_diff_val)
-        
+
         # Construct core part of trading symbols for CE and PE to aid matching
         ce_symbol_pattern_core = f"{symbol_prefix}{int(current_strike)}"
         pe_symbol_pattern_core = f"{symbol_prefix}{int(current_strike)}"
 
         #print(ce_symbol_pattern_core)
-        
+
         found_ce, found_pe = None, None
         # Search through all instruments for matches
         for inst in instruments:
-            # Match instrument by name, strike, expiry date, and echange 
+            # Match instrument by name, strike, expiry date, and echange
             if inst['name'] == underlying_prefix_str and \
                inst['strike'] == current_strike and \
                inst['expiry'] == expiry_dt and \
                inst['exchange'] == EXCHANGE_NFO_OPTIONS:
-                
+
                 # Further match by instrument type (CE/PE) and ensure core symbol pattern is present
                 if inst['instrument_type'] == 'CE' and ce_symbol_pattern_core in inst['tradingsymbol']:
                     found_ce = inst
                 elif inst['instrument_type'] == 'PE' and pe_symbol_pattern_core in inst['tradingsymbol']:
                     found_pe = inst
-            
+
             # Optimization: if both CE and PE found for this strike, no need to search further for this strike
             if found_ce and found_pe:
-                break 
-        
+                break
+
         # Determine key suffix (atm, itm1, otm1, etc.) based on position relative to ATM
         if i == 0: key_suffix = "atm"
         elif i < 0: key_suffix = f"itm{-i}" # e.g., i=-1 -> itm1 (strike < ATM)
         else: key_suffix = f"otm{i}"       # e.g., i=1  -> otm1 (strike > ATM)
-        
+
         if found_ce:
             relevant_options[f"{key_suffix}_ce"] = {
-                'tradingsymbol': found_ce['tradingsymbol'], 
-                'instrument_token': found_ce['instrument_token'], 
+                'tradingsymbol': found_ce['tradingsymbol'],
+                'instrument_token': found_ce['instrument_token'],
                 'strike': current_strike
             }
         else:
             logging.warning(f"CE option not found for strike {current_strike}, expiry {expiry_dt}")
-        
+
         if found_pe:
             relevant_options[f"{key_suffix}_pe"] = {
-                'tradingsymbol': found_pe['tradingsymbol'], 
-                'instrument_token': found_pe['instrument_token'], 
+                'tradingsymbol': found_pe['tradingsymbol'],
+                'instrument_token': found_pe['instrument_token'],
                 'strike': current_strike
             }
         else:
             logging.warning(f"PE option not found for strike {current_strike}, expiry {expiry_dt}")
-            
+
     logging.debug(f"Relevant option details identified: {len(relevant_options)} contracts.")
     return relevant_options
 
-def fetch_historical_oi_data(kite_obj: KiteConnect, option_details_dict: dict, 
+def fetch_historical_oi_data(kite_obj: KiteConnect, option_details_dict: dict,
                              minutes_of_data: int = HISTORICAL_DATA_MINUTES):
     """
     Fetches historical OI data (minute interval) for the provided option contracts.
@@ -286,7 +286,7 @@ def fetch_historical_oi_data(kite_obj: KiteConnect, option_details_dict: dict,
 
     # Calculate date range for historical data API call
     # Kite API expects "YYYY-MM-DD HH:MM:SS" format, and times are usually in UTC.
-    to_date = datetime.now()  # Current local time 
+    to_date = datetime.now()  # Current local time
     from_date = to_date - timedelta(minutes=minutes_of_data)
     from_date_str = from_date.strftime("%Y-%m-%d %H:%M:00")
     to_date_str = to_date.strftime("%Y-%m-%d %H:%M:00")
@@ -301,7 +301,7 @@ def fetch_historical_oi_data(kite_obj: KiteConnect, option_details_dict: dict,
             logging.warning(f"Missing instrument_token for {option_key} ({tradingsymbol}). Skipping historical data fetch.")
             historical_oi_store[option_key] = []  # Store empty list for consistency
             continue
-        
+
         try:
             logging.debug(f"Fetching historical OI for {tradingsymbol} (Token: {instrument_token})")
             # Fetch minute-interval data including Open Interest (oi=True)
@@ -318,7 +318,7 @@ def fetch_historical_oi_data(kite_obj: KiteConnect, option_details_dict: dict,
 
     return historical_oi_store
 
-def find_oi_at_timestamp(historical_candles: list, target_time: datetime, 
+def find_oi_at_timestamp(historical_candles: list, target_time: datetime,
                           latest_oi_and_time: tuple):
     """
     Finds Open Interest (OI) at or just before a specific target_time from a list of historical candles.
@@ -348,7 +348,7 @@ def find_oi_at_timestamp(historical_candles: list, target_time: datetime,
             if latest_oi_and_time and candle_time > latest_oi_and_time[1]:
                 continue  # This candle is too new compared to the reference latest OI point
             return candle.get('oi')
-            
+
     # If loop completes, no candle was found at or before target_time (or before the first candle)
     return None
 
@@ -371,14 +371,14 @@ def calculate_oi_differences(raw_historical_data_store: dict, intervals_min: tup
 
     for option_key, candles_list in raw_historical_data_store.items():
         oi_differences_report[option_key] = {}
-        
+
         latest_oi, latest_oi_timestamp = None, None
         if candles_list:
             # Candles are sorted oldest to newest by API; the last one is the latest.
             latest_candle = candles_list[-1]
             latest_oi = latest_candle.get('oi')
             latest_oi_timestamp = latest_candle.get('date') # This is a datetime object
-        
+
         oi_differences_report[option_key]['latest_oi'] = latest_oi
         oi_differences_report[option_key]['latest_oi_timestamp'] = latest_oi_timestamp
 
@@ -392,13 +392,13 @@ def calculate_oi_differences(raw_historical_data_store: dict, intervals_min: tup
         # Calculate OI at different past intervals
         for interval in intervals_min:
             target_past_time = current_processing_time - timedelta(minutes=interval)
-            
+
             past_oi = find_oi_at_timestamp(
                 candles_list,
                 target_past_time,
                 latest_oi_and_time=(latest_oi, latest_oi_timestamp) # Pass current latest OI info
             )
-            
+
             abs_oi_diff = None
             pct_oi_change = None
             if past_oi is not None:
@@ -408,10 +408,10 @@ def calculate_oi_differences(raw_historical_data_store: dict, intervals_min: tup
                 # else: pct_oi_change remains None if past_oi is 0 but abs_oi_diff is not (Infinite change)
             else:
                 logging.debug(f"Could not find past OI for {option_key} at {interval}m prior ({target_past_time.strftime('%H:%M:%S %Z')}). abs_oi_diff and pct_oi_change will be None.")
-            
+
             oi_differences_report[option_key][f'abs_diff_{interval}m'] = abs_oi_diff
             oi_differences_report[option_key][f'pct_diff_{interval}m'] = pct_oi_change
-            
+
     logging.debug("OI differences calculation complete.")
     return oi_differences_report
 
@@ -436,8 +436,8 @@ def _get_key_suffix(index_from_atm: int, total_options_one_side: int) -> str:
     else: # Strikes greater than ATM
         return f"otm{index_from_atm}"  # e.g., index 1 is otm1
 
-def generate_options_tables(oi_report: dict, contract_details: dict, current_atm_strike: float, 
-                            strike_step: int, num_strikes_each_side: int, 
+def generate_options_tables(oi_report: dict, contract_details: dict, current_atm_strike: float,
+                            strike_step: int, num_strikes_each_side: int,
                             change_intervals_list: tuple):
     """
     Generates two Rich Tables (one for Calls, one for Puts) displaying the OI analysis.
@@ -459,11 +459,11 @@ def generate_options_tables(oi_report: dict, contract_details: dict, current_atm
         return Panel("[bold red]ATM Strike could not be determined. Tables cannot be generated.[/bold red]", title="Error", border_style="red")
 
     time_now_str = datetime.now().strftime('%H:%M:%S') # Timestamp for table titles
-    
+
     # Create Call options table
     call_table_title = f"CALL Options OI ({UNDERLYING_SYMBOL} - ATM: {int(current_atm_strike)}) @ {time_now_str}"
     call_table = Table(title=call_table_title, show_lines=True, expand=True)
-    
+
     # Create Put options table
     put_table_title = f"PUT Options OI ({UNDERLYING_SYMBOL} - ATM: {int(current_atm_strike)}) @ {time_now_str}"
     put_table = Table(title=put_table_title, show_lines=True, expand=True)
@@ -472,7 +472,7 @@ def generate_options_tables(oi_report: dict, contract_details: dict, current_atm
     cols = ["Strike", "Symbol", "Latest OI", "OI Time"]
     for interval in change_intervals_list: # Dynamically add OI change columns
         cols.append(f"OI %Chg ({interval}m)") # Updated column header
-    
+
     for col_name in cols:
         call_table.add_column(col_name, justify="right")
         put_table.add_column(col_name, justify="right")
@@ -491,12 +491,12 @@ def generate_options_tables(oi_report: dict, contract_details: dict, current_atm
         option_key_ce = f"{key_suffix}_ce" # e.g., "atm_ce", "itm1_ce"
         ce_data = oi_report.get(option_key_ce, {}) # Get data for this call option
         ce_contract = contract_details.get(option_key_ce, {}) # Get contract details
-        
+
         ce_strike_display = str(int(ce_contract.get('strike', strike_val))) # Use actual strike from contract if available
-        
+
         # Style strike price: ATM (cyan), ITM for Calls (lower strikes - green), OTM for Calls (higher strikes - red)
         ce_strike_style = "cyan" if i == 0 else ("green" if i < 0 else "red")
-        
+
         ce_latest_oi = ce_data.get('latest_oi')
         ce_latest_oi_time = ce_data.get('latest_oi_timestamp')
 
@@ -512,7 +512,7 @@ def generate_options_tables(oi_report: dict, contract_details: dict, current_atm
             total_call_cells = total_call_cells+1
             pct_oi_change = ce_data.get(f'pct_diff_{interval}m')
             formatted_pct_str = f"{pct_oi_change:+.2f}%" if pct_oi_change is not None else "N/A"
-            
+
             cell_text = Text(formatted_pct_str)
             if pct_oi_change is not None and interval in PCT_CHANGE_THRESHOLDS:
                 if abs(pct_oi_change) > PCT_CHANGE_THRESHOLDS[interval]: # Check absolute change against threshold
@@ -527,7 +527,7 @@ def generate_options_tables(oi_report: dict, contract_details: dict, current_atm
         pe_contract = contract_details.get(option_key_pe, {}) # Get contract details
 
         pe_strike_display = str(int(pe_contract.get('strike', strike_val)))
-        
+
         # Style strike price: ATM (cyan), ITM for Puts (higher strikes - green), OTM for Puts (lower strikes - red)
         pe_strike_style = "cyan" if i == 0 else ("green" if i > 0 else "red")
 
@@ -554,7 +554,7 @@ def generate_options_tables(oi_report: dict, contract_details: dict, current_atm
             pe_row_data.append(cell_text)
         put_table.add_row(*pe_row_data)
     if (float(total_put_threshold_breached)/float(total_put_cells) > 0.5) or (float(total_call_threshold_breached)/float(total_call_cells) > 0.5):
-        os.system('afplay /Users/vibhu/zd/siren-alert-96052.mp3')    
+        os.system('afplay /Users/vibhu/zd/siren-alert-96052.mp3')
 
 
     return Group(call_table, put_table) # Group tables for simultaneous display in Live
@@ -582,7 +582,7 @@ def run_analysis_iteration(kite_conn: KiteConnect, nfo_instr: list, nearest_exp_
         if not current_atm_strike: # Critical if ATM cannot be determined for this iteration
             logging.error("Could not determine ATM strike for this iteration.")
             return Panel("[bold red]Error: Could not determine ATM strike. Check logs. Waiting for next refresh.[/bold red]", title="Update Error", border_style="red")
-        
+
         # This check should ideally be redundant if main() ensures nearest_exp_date is valid before starting loop
         if not nearest_exp_date:
              logging.error("Nearest expiry date is not available (should not happen if pre-checked).")
@@ -593,7 +593,7 @@ def run_analysis_iteration(kite_conn: KiteConnect, nfo_instr: list, nearest_exp_
             nfo_instr, current_atm_strike, nearest_exp_date,
             STRIKE_DIFFERENCE, OPTIONS_COUNT, UNDERLYING_PREFIX, symbol_prefix
         )
-        
+
         # If no contracts are found (e.g., due to market close or issues with instrument list for that ATM)
         if not option_contract_details:
             logging.warning(f"Could not retrieve relevant option contracts for ATM {int(current_atm_strike)}.")
@@ -604,13 +604,13 @@ def run_analysis_iteration(kite_conn: KiteConnect, nfo_instr: list, nearest_exp_
         # 3. Fetch historical OI data for these contracts
         raw_historical_oi_data = fetch_historical_oi_data(kite_conn, option_contract_details)
         #print(raw_historical_oi_data)
-        
+
         # 4. Calculate OI differences
         oi_change_data = calculate_oi_differences(raw_historical_oi_data, OI_CHANGE_INTERVALS_MIN)
-        
+
         # 5. Generate Rich tables for display
         table_group = generate_options_tables(
-            oi_change_data, option_contract_details, current_atm_strike, 
+            oi_change_data, option_contract_details, current_atm_strike,
             STRIKE_DIFFERENCE, OPTIONS_COUNT, OI_CHANGE_INTERVALS_MIN
         )
         logging.debug("Analysis iteration completed successfully.")
@@ -648,7 +648,7 @@ def main():
         data = kite.generate_session(request_token, api_secret=api_secret_to_use)
         kite.set_access_token(data["access_token"])
         console.print("[bold green]Kite API session generated and access token set successfully![/bold green]")
-        
+
         profile = kite.profile() # Verify connection by fetching profile
         console.print(f"[green]Successfully connected for user: {profile.get('user_id')} ({profile.get('user_name')})[/green]")
 
@@ -675,14 +675,14 @@ def main():
             logging.critical(f"Could not determine nearest weekly expiry for {UNDERLYING_PREFIX}.")
             sys.exit(1) # Critical error
         console.print(f"Tracking options for expiry: [bold magenta]{nearest_expiry_date.strftime('%d-%b-%Y')}[/bold magenta]")
-        
+
         console.print(f"Starting live updates. Refresh interval: {REFRESH_INTERVAL_SECONDS} seconds. Press Ctrl+C to exit.")
         console.print(f"Underlying: [bold cyan]{UNDERLYING_SYMBOL}[/bold cyan], Strike Difference: [bold cyan]{STRIKE_DIFFERENCE}[/bold cyan], Options Count per side: [bold cyan]{OPTIONS_COUNT}[/bold cyan]")
 
         # --- Live Update Loop ---
         # refresh_per_second for Live is for UI animation smoothness if any;
         # auto_refresh=False means we control update timing with time.sleep()
-        with Live(console=console, refresh_per_second=10, auto_refresh=False) as live: 
+        with Live(console=console, refresh_per_second=10, auto_refresh=False) as live:
             while True:
                 logging.info("Starting new live update cycle.")
                 # Perform one iteration of analysis
@@ -707,7 +707,7 @@ def main():
         console.print("\n[bold yellow]Script terminated by user (Ctrl+C).[/bold yellow]")
         logging.info("Script terminated by user.")
     # Catch any other unexpected critical errors during the main setup
-    except Exception as e: 
+    except Exception as e:
         console.print(f"[bold red]An unexpected critical error occurred in the main setup: {e}[/bold red]")
         logging.critical(f"Unexpected critical error in main: {e}", exc_info=True)
         sys.exit(1)
