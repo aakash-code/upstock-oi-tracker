@@ -25,9 +25,9 @@ ACCESS_TOKEN = os.environ.get("UPSTOX_ACCESS_TOKEN")
 # Application constants
 UNDERLYING_INSTRUMENT = "NSE_INDEX|Nifty 50"
 STRIKE_DIFFERENCE = 50
-NUM_STRIKES = 2  # Fetches ATM, 2 ITM, and 2 OTM strikes
+NUM_STRIKES = 3  # Fetches ATM, 3 ITM, and 3 OTM strikes
 DATA_INTERVAL = "1minute"
-OI_INTERVALS_MIN = [10, 15, 30]
+OI_INTERVALS_MIN = [3, 5, 10, 15, 30]
 
 # --- Step 3: Global State Management ---
 # Global variables for the API client and application state
