@@ -125,8 +125,9 @@ def update_oi_data():
     try:
         # 1. Get ATM Strike
         quote_api = upstox_client.MarketQuoteApi(api_client)
-        api_response = quote_api.get_market_quote(UNDERLYING_INSTRUMENT, "v1")
-        ltp = api_response.data.last_price
+        # CORRECTED METHOD: The original `get_market_quote` was incorrect. The correct method is `ltp`.
+        api_response = quote_api.ltp(UNDERLYING_INSTRUMENT, "v2")
+        ltp = api_response.data[UNDERLYING_INSTRUMENT].last_price
         if not ltp:
             app_state.update({"status": "Error", "message": "Could not fetch NIFTY LTP."})
             logging.error(app_state["message"])
@@ -136,8 +137,6 @@ def update_oi_data():
 
         # 2. Get nearest weekly expiry from option contracts
         today = date.today()
-        nearest_expiry = (today + timedelta(days=7)).strftime('%Y-%m-%d') # Default to next week
-
         # Simplified expiry logic: assume nearest Thursday
         days_to_thursday = (3 - today.weekday() + 7) % 7
         nearest_expiry = (today + timedelta(days=days_to_thursday)).strftime('%Y-%m-%d')
