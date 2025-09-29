@@ -40,13 +40,12 @@ app_state = {
 }
 
 # ==============================================================================
-# --- CORE API AND DATA LOGIC (RECONSTRUCTED WITH ALL FIXES) ---
+# --- CORE API AND DATA LOGIC (BUILT FROM SCRATCH WITH ALL CORRECTIONS) ---
 # ==============================================================================
 
 def initialize_api_client():
     """
-    Initializes the Upstox API client using the access token from the environment.
-    Verifies the connection by fetching the user profile.
+    Initializes the Upstox API client and verifies the connection.
     """
     global api_client
     if not ACCESS_TOKEN or "YOUR_ACCESS_TOKEN" in ACCESS_TOKEN:
@@ -59,7 +58,6 @@ def initialize_api_client():
         configuration.access_token = ACCESS_TOKEN
         api_client = upstox_client.ApiClient(configuration)
 
-        # Verify connection
         user_api = upstox_client.UserApi(api_client)
         user_api.get_profile("v1")
 
@@ -74,15 +72,12 @@ def initialize_api_client():
 
 def get_atm_strike():
     """
-    Fetches the Last Traded Price (LTP) for the underlying instrument
-    and calculates the At-The-Money (ATM) strike price.
+    Fetches the Last Traded Price (LTP) and calculates the At-The-Money (ATM) strike.
     """
     try:
         quote_api = upstox_client.MarketQuoteApi(api_client)
-        # FIX: Correct method is ltp()
         api_response = quote_api.ltp(UNDERLYING_INSTRUMENT, "v2")
 
-        # FIX: Robustly parse the response to avoid KeyError
         ltp_data = list(api_response.data.values())[0]
         ltp = ltp_data.last_price
 
@@ -91,7 +86,7 @@ def get_atm_strike():
             logging.info(f"NIFTY LTP: {ltp}, ATM Strike: {atm_strike}")
             return atm_strike
         else:
-            logging.error("Could not fetch NIFTY 50 LTP. The value was empty.")
+            logging.error("Could not fetch NIFTY 50 LTP.")
             return None
     except Exception as e:
         logging.error(f"Error fetching ATM strike: {e}", exc_info=True)
@@ -99,11 +94,9 @@ def get_atm_strike():
 
 def get_nearest_weekly_expiry():
     """
-    Fetches all option contracts for the underlying to find the nearest
-    upcoming weekly expiry date.
+    Finds the nearest upcoming weekly expiry date by fetching all available contracts.
     """
     try:
-        # FIX: Correct class is OptionsApi
         options_api = upstox_client.OptionsApi(api_client)
         response = options_api.get_option_contracts(instrument_key=UNDERLYING_INSTRUMENT)
 
@@ -114,15 +107,14 @@ def get_nearest_weekly_expiry():
         today = datetime.now().date()
         future_expiries = set()
 
-        # FIX: Correct attribute is .expiry on the InstrumentData object
         for contract in response.data:
-            if contract.expiry:
+            if contract.expiry and contract.weekly:
                 expiry_dt = contract.expiry.date()
-                if expiry_dt >= today and contract.weekly:
+                if expiry_dt >= today:
                     future_expiries.add(expiry_dt)
 
         if not future_expiries:
-            logging.error("No future weekly expiry dates found from option contracts.")
+            logging.error("No future weekly expiry dates found.")
             return None
 
         nearest_expiry_date = sorted(list(future_expiries))[0]
@@ -138,7 +130,6 @@ def get_option_chain(expiry_date):
     Fetches the full Put/Call option chain for a given expiry date.
     """
     try:
-        # FIX: Correct class is OptionsApi and method is get_put_call_option_chain
         options_api = upstox_client.OptionsApi(api_client)
         response = options_api.get_put_call_option_chain(
             instrument_key=UNDERLYING_INSTRUMENT,
@@ -194,9 +185,8 @@ def calculate_oi_change(candles, latest_oi):
 
 def process_single_option(option_data, strike_price):
     """
-    A helper function to process one option contract (either a call or a put).
+    Helper function to process one option contract (a call or a put).
     """
-    # FIX: The instrument_key is nested inside this PutCallOptionChainData object
     if not option_data or not option_data.instrument_key:
         return None
 
@@ -214,8 +204,7 @@ def process_single_option(option_data, strike_price):
 
 def update_data_in_background():
     """
-    This is the main background task. It orchestrates fetching all data,
-    processing it, and updating the global app_state.
+    The main background task that orchestrates fetching and processing all data.
     """
     if not api_client:
         return
@@ -248,11 +237,8 @@ def update_data_in_background():
         total_cells = len(strikes_to_fetch) * len(OI_INTERVALS_MIN) * 2
 
         app_state["message"] = "Processing contracts..."
-        # FIX: The main object in the chain is OptionStrikeData
         for strike_data in option_chain:
             if strike_data.strike_price in strikes_to_fetch:
-
-                # FIX: Access the nested call_options object
                 call_result = process_single_option(strike_data.call_options, strike_data.strike_price)
                 if call_result:
                     processed_data["calls"].append(call_result)
@@ -260,8 +246,7 @@ def update_data_in_background():
                     if abs(call_result.get("chg_15m", 0)) > 15: highlighted_cells += 1
                     if abs(call_result.get("chg_30m", 0)) > 25: highlighted_cells += 1
 
-                # FIX: Access the nested put_options object
-                put_result = process_single_option(strike_data.put_options, strike_data.strike_price)
+                put_result = process_single_option(strike_data.put_options, strike_data.strike_strike_price)
                 if put_result:
                     processed_data["puts"].append(put_result)
                     if abs(put_result.get("chg_10m", 0)) > 10: highlighted_cells += 1
@@ -284,7 +269,7 @@ def update_data_in_background():
         logging.error(f"{app_state['message']} Details: {e}", exc_info=True)
 
 def background_scheduler():
-    """A simple scheduler to run the data update task every 60 seconds."""
+    """Scheduler to run the data update task every 60 seconds."""
     while True:
         update_data_in_background()
         time.sleep(60)
@@ -300,9 +285,7 @@ def index():
 
 @app.route("/status")
 def status_endpoint():
-    """
-    Provides the current application status and data to the frontend.
-    """
+    """Provides the current application status and data to the frontend."""
     return jsonify({
         "status": app_state["status"],
         "message": app_state["message"],
@@ -317,13 +300,10 @@ def status_endpoint():
 if __name__ == "__main__":
     if initialize_api_client():
         logging.info("API client ready. Starting background data scheduler...")
-        # Run first update immediately to populate initial data
         update_data_in_background()
-        # Start the scheduler in a separate thread
         scheduler_thread = threading.Thread(target=background_scheduler, daemon=True)
         scheduler_thread.start()
     else:
-        logging.error("Could not start background tasks due to API client initialization failure. The server will run to display the error.")
+        logging.error("Could not start background tasks due to API client initialization failure.")
 
-    # Run the Flask app
     app.run(host='0.0.0.0', port=5000, debug=False)
