@@ -127,7 +127,10 @@ def update_oi_data():
         quote_api = upstox_client.MarketQuoteApi(api_client)
         # CORRECTED METHOD: The original `get_market_quote` was incorrect. The correct method is `ltp`.
         api_response = quote_api.ltp(UNDERLYING_INSTRUMENT, "v2")
-        ltp = api_response.data[UNDERLYING_INSTRUMENT].last_price
+        # FINAL FIX: The response is a dictionary keyed by the instrument. Instead of guessing the key,
+        # we will access the first value in the dictionary, which is the data object we need.
+        ltp_data = list(api_response.data.values())[0]
+        ltp = ltp_data.last_price
         if not ltp:
             app_state.update({"status": "Error", "message": "Could not fetch NIFTY LTP."})
             logging.error(app_state["message"])
