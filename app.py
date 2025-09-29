@@ -68,12 +68,13 @@ def initialize_api_client():
 def get_option_chain(expiry_date):
     """Fetches the option chain for a specific expiry date."""
     try:
-        option_chain_api = upstox_client.OptionChainApi(api_client)
-        response = option_chain_api.get_option_chain(
-            api_version="v2",
+        # CORRECTED: Use the correct `OptionsApi` class and `get_put_call_option_chain` method
+        options_api = upstox_client.OptionsApi(api_client)
+        response = options_api.get_put_call_option_chain(
             instrument_key=UNDERLYING_INSTRUMENT,
             expiry_date=expiry_date
         )
+        # The data from the option chain is a list of contracts.
         return response.data
     except Exception as e:
         logging.error(f"Error fetching option chain for expiry {expiry_date}: {e}", exc_info=True)
